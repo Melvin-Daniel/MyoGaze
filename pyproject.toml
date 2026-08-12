@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neuroshift"
+version = "0.4.0"
+description = "Gaze-selected, EMG-confirmed smart-home intention with Act/Abstain"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "opencv-python>=4.8",
+  "mediapipe>=0.10",
+  "numpy>=1.24",
+  "ultralytics>=8.0",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+hw = ["paho-mqtt>=2.0", "pyserial>=3.5"]
+
+[project.scripts]
+neuroshift = "src.neuroshift.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

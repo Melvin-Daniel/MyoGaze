@@ -1,0 +1,9 @@
+.git
+.venv
+venv
+node_modules
+web/node_modules
+**/__pycache__
+*.pt
+logs
+.cursor

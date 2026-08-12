@@ -1,0 +1,30 @@
+# NeuroShift default product config
+# Override any field; unknown keys are ignored.
+
+product_name: NeuroShift
+frame_width: 1280
+frame_height: 720
+mirror_preview: true
+
+dwell_seconds: 0.55
+gaze_select_threshold: 0.50
+yaw_side_threshold: 0.20
+yaw_hysteresis: 0.10
+gaze_smooth_alpha: 0.28
+
+emg_mode: keyboard
+emg_confirm_threshold: 0.5
+emg_pulse_ms: 380
+act_cooldown_seconds: 0.70
+emg_serial_port: COM3
+emg_serial_baud: 115200
+
+mqtt_enabled: false
+mqtt_host: 127.0.0.1
+mqtt_port: 1883
+
+# live = webcam; mock = scripted offline demo
+# (runtime also auto-falls back to mock if camera fails)
+
+mock_fps: 20
+mock_write_video: true

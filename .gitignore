@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+logs/
+*.pt
+*.onnx
+tmp_*.jpg
+.DS_Store
+Thumbs.db
+web/node_modules/
+web/dist/
+.fastapi/
