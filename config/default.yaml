@@ -1,16 +1,19 @@
 # NeuroShift default product config
 # Override any field; unknown keys are ignored.
 
-product_name: NeuroShift
+product_name: MyoGaze
 frame_width: 1280
 frame_height: 720
 mirror_preview: true
 
-dwell_seconds: 0.55
+dwell_seconds: 2.0
+dwell_required: true
+dwell_actuates: true
 gaze_select_threshold: 0.50
 yaw_side_threshold: 0.20
 yaw_hysteresis: 0.10
 gaze_smooth_alpha: 0.28
+gaze_eye_weight: 0.72
 
 emg_mode: keyboard
 emg_confirm_threshold: 0.5
@@ -19,12 +22,25 @@ act_cooldown_seconds: 0.70
 emg_serial_port: COM3
 emg_serial_baud: 115200
 
-mqtt_enabled: false
+# Laptop and ESP32 must hit the SAME broker. Use your PC LAN IP for phones.
+mqtt_enabled: true
 mqtt_host: 127.0.0.1
 mqtt_port: 1883
+hub_serial_port: COM4
+hub_serial_baud: 115200
 
-# live = webcam; mock = scripted offline demo
-# (runtime also auto-falls back to mock if camera fails)
+# Detector — custom lamp fine-tune (train with scripts/train_lamp.py)
+yolo_model: runs/lamp/v2/weights/best.pt
+yolo_conf: 0.12
+yolo_every_n_frames: 4
+yolo_imgsz: 416
+
+live_frame_width: 640
+live_frame_height: 480
+live_preview_max_width: 400
+live_jpeg_quality: 42
+live_preview_every_n: 1
+live_target_fps: 20
 
 mock_fps: 20
 mock_write_video: true

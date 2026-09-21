@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MyoGaze — Label lamp</title>
+    <style>
+      :root {
+        --bg: #f4f1ea;
+        --ink: #1e2420;
+        --muted: #5c665f;
+        --harbor: #2b6459;
+        --card: #fff;
+        --border: #d8d3c8;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+      }
+      header {
+        padding: 16px 20px 8px;
+        max-width: 960px;
+        margin: 0 auto;
+      }
+      h1 { font-size: 22px; margin: 0 0 6px; }
+      p { margin: 0; color: var(--muted); font-size: 14px; }
+      .stage-wrap {
+        max-width: 960px;
+        margin: 12px auto 20px;
+        padding: 0 20px;
+      }
+      .stage {
+        position: relative;
+        background: #111;
+        border-radius: 12px;
+        overflow: hidden;
+        min-height: 240px;
+        cursor: crosshair;
+        user-select: none;
+        touch-action: none;
+      }
+      .stage img {
+        display: block;
+        width: 100%;
+        height: auto;
+        pointer-events: none;
+        -webkit-user-drag: none;
+        user-select: none;
+      }
+      .box {
+        position: absolute;
+        border: 3px solid #3ecf8e;
+        box-shadow: 0 0 0 1px rgba(0,0,0,.4);
+        pointer-events: none;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 16px;
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        background: var(--harbor);
+        color: #fff;
+      }
+      button.ghost {
+        background: #fff;
+        color: var(--ink);
+        border: 1px solid var(--border);
+      }
+      button:disabled { opacity: 0.45; cursor: default; }
+      .stat { font-size: 13px; color: var(--muted); margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Draw a box on the bulb</h1>
+      <p>
+        Drag on the photo around the white globe only. Then Next. Do not box your face.
+        A green box may already be there — fix it if it is wrong.
+      </p>
+    </header>
+    <div class="stage-wrap">
+      <div class="stage" id="stage" role="application" aria-label="lamp photo to label">
+        <img id="photo" alt="lamp photo" draggable="false" />
+        <div class="box" id="box" hidden></div>
+      </div>
+      <div class="stat" id="stat">Loading…</div>
+      <div class="row">
+        <button class="ghost" type="button" id="prev">Back</button>
+        <button type="button" id="next">Save &amp; Next</button>
+        <button class="ghost" type="button" id="clear">No lamp in this photo</button>
+      </div>
+    </div>
+    <script>
+      const photo = document.getElementById("photo");
+      const stage = document.getElementById("stage");
+      const boxEl = document.getElementById("box");
+      const stat = document.getElementById("stat");
+      photo.draggable = false;
+      let items = [];
+      let i = 0;
+      let box = null;
+      let drag = null;
+      let beforeDrag = null;
+
+      function fit() {
+        if (!box || !photo.naturalWidth) {
+          boxEl.hidden = true;
+          return;
+        }
+        const r = photo.getBoundingClientRect();
+        const s = stage.getBoundingClientRect();
+        const sx = r.width / photo.naturalWidth;
+        const sy = r.height / photo.naturalHeight;
+        boxEl.hidden = false;
+        boxEl.style.left = r.left - s.left + box.x0 * sx + "px";
+        boxEl.style.top = r.top - s.top + box.y0 * sy + "px";
+        boxEl.style.width = Math.max(4, (box.x1 - box.x0) * sx) + "px";
+        boxEl.style.height = Math.max(4, (box.y1 - box.y0) * sy) + "px";
+      }
+
+      function pt(ev) {
+        const r = photo.getBoundingClientRect();
+        if (!r.width || !r.height) return { x: 0, y: 0 };
+        const x = ((ev.clientX - r.left) / r.width) * photo.naturalWidth;
+        const y = ((ev.clientY - r.top) / r.height) * photo.naturalHeight;
+        return {
+          x: Math.max(0, Math.min(photo.naturalWidth, x)),
+          y: Math.max(0, Math.min(photo.naturalHeight, y)),
+        };
+      }
+
+      function applyDrag(ev) {
+        if (!drag) return;
+        const p = pt(ev);
+        box = {
+          x0: Math.min(drag.x, p.x),
+          y0: Math.min(drag.y, p.y),
+          x1: Math.max(drag.x, p.x),
+          y1: Math.max(drag.y, p.y),
+        };
+        fit();
+      }
+
+      async function load(idx) {
+        i = Math.max(0, Math.min(items.length - 1, idx));
+        const name = items[i];
+        photo.onload = fit;
+        photo.src = "/api/label/image/" + encodeURIComponent(name) + "?t=" + Date.now();
+        const res = await fetch("/api/label/box/" + encodeURIComponent(name));
+        const data = await res.json();
+        box = data.box;
+        stat.textContent = (i + 1) + " / " + items.length + "  —  " + name;
+        fit();
+      }
+
+      async function save(andNext) {
+        const name = items[i];
+        await fetch("/api/label/box/" + encodeURIComponent(name), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ box }),
+        });
+        if (andNext && i + 1 < items.length) load(i + 1);
+        else if (andNext) stat.textContent = "Done — all " + items.length + " photos saved. You can close this tab.";
+      }
+
+      stage.addEventListener("pointerdown", (ev) => {
+        if (ev.button !== 0 || !photo.naturalWidth) return;
+        ev.preventDefault();
+        stage.setPointerCapture(ev.pointerId);
+        const p = pt(ev);
+        beforeDrag = box ? { ...box } : null;
+        drag = { x: p.x, y: p.y };
+        box = { x0: p.x, y0: p.y, x1: p.x, y1: p.y };
+        fit();
+      });
+      stage.addEventListener("pointermove", (ev) => {
+        if (!drag) return;
+        ev.preventDefault();
+        applyDrag(ev);
+      });
+      function endDrag(ev) {
+        if (!drag) return;
+        applyDrag(ev);
+        const tooSmall = !box || box.x1 - box.x0 < 8 || box.y1 - box.y0 < 8;
+        if (tooSmall) box = beforeDrag;
+        drag = null;
+        beforeDrag = null;
+        fit();
+      }
+      stage.addEventListener("pointerup", endDrag);
+      stage.addEventListener("pointercancel", endDrag);
+      stage.addEventListener("dragstart", (ev) => ev.preventDefault());
+      window.addEventListener("resize", fit);
+      document.getElementById("next").onclick = () => save(true);
+      document.getElementById("prev").onclick = () => {
+        if (i > 0) load(i - 1);
+      };
+      document.getElementById("clear").onclick = () => {
+        box = null;
+        fit();
+      };
+      document.addEventListener("keydown", (ev) => {
+        if (ev.key === "d" || ev.key === "D" || ev.key === "ArrowRight") save(true);
+        if (ev.key === "a" || ev.key === "A" || ev.key === "ArrowLeft") {
+          if (i > 0) load(i - 1);
+        };
+      });
+
+      fetch("/api/label/list")
+        .then((r) => r.json())
+        .then((data) => {
+          items = data.images || [];
+          if (!items.length) {
+            stat.textContent = "No photos in datasets/lamp/raw — run python scripts/capture_lamp.py first.";
+            return;
+          }
+          load(typeof data.start === "number" ? data.start : 0);
+        });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0b0c0e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="MyoGaze" />
+    <title>MyoGaze — iPhone</title>
+    <style>
+      :root {
+        --bg: #0b0c0e;
+        --ink: #f4f1ea;
+        --muted: #9a958a;
+        --accent: #c8a36a;
+        --card: #141518;
+        --border: #2a2b31;
+        --ink-on-accent: #0b0c0e;
+      }
+      body {
+        margin: 0;
+        font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      main {
+        max-width: 440px;
+        margin: 0 auto;
+        padding: 28px 20px 48px;
+      }
+      .kicker {
+        font-size: 11px;
+        font-weight: 660;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin: 0 0 8px;
+      }
+      h1 {
+        font-size: 1.45rem;
+        letter-spacing: -0.03em;
+        margin: 0 0 8px;
+      }
+      .lede {
+        color: var(--muted);
+        margin: 0 0 22px;
+      }
+      ol {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 18px 18px 18px 38px;
+        margin: 0 0 20px;
+      }
+      li {
+        margin: 0 0 12px;
+      }
+      a.btn {
+        display: block;
+        text-align: center;
+        background: var(--accent);
+        color: var(--ink-on-accent);
+        text-decoration: none;
+        font-weight: 600;
+        border-radius: 999px;
+        padding: 14px 16px;
+        margin: 0 0 12px;
+      }
+      a.btn.secondary {
+        background: transparent;
+        color: var(--ink);
+        border: 1px solid var(--border);
+      }
+      code {
+        font-size: 0.92em;
+        background: #222328;
+        padding: 1px 6px;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="kicker">MyoGaze</p>
+      <h1>iPhone</h1>
+      <p class="lede">
+        Safari plus Add to Home Screen. Install the profile first. Do not tap Visit Website.
+      </p>
+      <ol>
+        <li>Tap <strong>Install certificate</strong>. Allow the download.</li>
+        <li>Open <strong>Settings</strong>. Tap <strong>Profile Downloaded</strong>, then Install.</li>
+        <li>
+          Go to <strong>Settings → General → About → Certificate Trust Settings</strong> and enable
+          <strong>MyoGaze LAN CA</strong>.
+        </li>
+        <li>Come back and tap <strong>Open MyoGaze</strong> (HTTPS). Allow the camera.</li>
+        <li>
+          Share → <strong>Add to Home Screen</strong>. Open MyoGaze from that icon next time.
+        </li>
+      </ol>
+      <a class="btn" href="/myogaze.cer">Install certificate</a>
+      <a class="btn secondary" id="https-link" href="https://127.0.0.1:8443">Open MyoGaze</a>
+    </main>
+    <script>
+      const host = location.hostname || "127.0.0.1";
+      document.getElementById("https-link").href = "https://" + host + ":8443/";
+    </script>
+  </body>
+</html>

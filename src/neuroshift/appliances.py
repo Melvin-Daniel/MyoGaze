@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+
+from .aliases import relay_id_for
 
 
 @dataclass
@@ -54,11 +56,25 @@ class ApplianceHub:
             return None
         self._prev_act_key = key
 
+        event = self.toggle(device_id, label or device_id)
+        relay = relay_id_for(device_id, label)
+        if relay != device_id:
+            names = {"lamp": "Lamp", "fan": "Fan", "plug": "Plug"}
+            self.toggle(relay, names.get(relay, relay))
+            event = ActuationEvent(
+                device_id=relay,
+                label=names.get(relay, event.label),
+                new_state=self.devices[relay].is_on,
+                command="ON" if self.devices[relay].is_on else "OFF",
+            )
+        return event
+
+    def toggle(self, device_id: str, label: str | None = None) -> ActuationEvent:
         state = self.ensure(device_id, label or device_id)
         state.is_on = not state.is_on
         state.toggle_count += 1
         return ActuationEvent(
-            device_id=device_id,
+            device_id=state.device_id,
             label=state.label,
             new_state=state.is_on,
             command="ON" if state.is_on else "OFF",

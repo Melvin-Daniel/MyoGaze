@@ -49,11 +49,14 @@ class SettingsIn(BaseModel):
     emg_serial_port: str | None = None
     pipeline_mode: Literal["live", "mock"] | None = None
     camera_index: int | None = Field(default=None, ge=0, le=10)
+    dwell_required: bool | None = None
 
 
 class SettingsOut(BaseModel):
     product_name: str = "NeuroShift"
     dwell_seconds: float
+    dwell_required: bool = True
+    dwell_actuates: bool = True
     yaw_side_threshold: float
     emg_confirm_threshold: float
     act_cooldown_seconds: float
@@ -64,7 +67,7 @@ class SettingsOut(BaseModel):
     pipeline_mode: str = "live"
     camera_index: int = 0
     camera_ok: bool | None = None
-    principle: str = "Looking selects. Muscle confirms. Unsure → Abstain."
+    principle: str = "Look at a device for two seconds to toggle it. Unsure → Abstain."
 
 
 class StatusOut(BaseModel):
@@ -79,16 +82,22 @@ class StatusOut(BaseModel):
     camera_ok: bool | None = None
     camera_message: str | None = None
     detect_mode: str = "objects"
+    dwell_required: bool = True
+    dwell_actuates: bool = True
+    iphone_setup_url: str | None = None
+    android_apk_url: str | None = None
 
 
 class DemoStartOut(BaseModel):
     started: bool
     message: str
     mode: str | None = None
+    camera: str | None = None
 
 
 class DemoStartIn(BaseModel):
     mode: Literal["live", "mock"] | None = None
+    camera: Literal["local", "remote"] | None = None
 
 
 class HealthOut(BaseModel):

@@ -1,0 +1,709 @@
+.app-shell.vn {
+  --paper: #edeae3;
+  --card: #f5f2eb;
+  --ink: #211f1c;
+  --ink-soft: #5c584f;
+  --ink-faint: #9b968a;
+  --border: rgba(33, 31, 28, 0.1);
+  --border-strong: rgba(33, 31, 28, 0.16);
+  --teal: #3e6d64;
+  --teal-wash: #e1e9e6;
+  --amber: #a9732e;
+  --amber-wash: #f1e4cd;
+  --red: #9c3730;
+  --red-wash: #f2dedb;
+  --r-lg: 16px;
+  --r-md: 12px;
+  --r-sm: 8px;
+  --bg: var(--paper);
+  --ink-0: var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: none;
+  font-family: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app-shell.vn button,
+.app-shell.vn input {
+  font-family: inherit;
+}
+
+.app-shell.vn .mono {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+.app-shell.vn .vn-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-shell.vn .vn-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.app-shell.vn .topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: max(22px, env(safe-area-inset-top)) 20px 16px;
+  flex-shrink: 0;
+  height: auto;
+  border: 0;
+  background: transparent;
+  position: static;
+}
+
+.app-shell.vn .id-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-shell.vn .avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.app-shell.vn .id-text .name {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.app-shell.vn .status-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 3px;
+}
+
+.app-shell.vn .status-pill.teal {
+  color: var(--teal);
+}
+
+.app-shell.vn .status-pill.amber {
+  color: var(--amber);
+}
+
+.app-shell.vn .status-pill.red {
+  color: var(--red);
+}
+
+.app-shell.vn .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+  display: inline-block;
+}
+
+.app-shell.vn .dot.tracking {
+  background: var(--teal);
+}
+
+.app-shell.vn .dot.tracking::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid var(--teal);
+  opacity: 0.4;
+  animation: vn-pulse 2.6s ease-in-out infinite;
+}
+
+.app-shell.vn .dot.amber {
+  background: var(--amber);
+}
+
+.app-shell.vn .dot.red {
+  background: var(--red);
+}
+
+.app-shell.vn .dot.offline {
+  background: var(--ink-faint);
+}
+
+@keyframes vn-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.4;
+  }
+  70% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.app-shell.vn .icon-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  color: var(--ink-soft);
+  display: flex;
+}
+
+.app-shell.vn .icon-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.app-shell.vn .content {
+  padding: 0 20px;
+}
+
+.app-shell.vn .section-head {
+  padding: 20px 20px 10px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.app-shell.vn .section-head .count {
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.app-shell.vn .nav.vn-nav {
+  display: flex;
+  border-top: 1px solid var(--border-strong);
+  background: var(--paper);
+  flex-shrink: 0;
+  padding-bottom: max(8px, env(safe-area-inset-bottom));
+  height: auto;
+  grid-template-columns: none;
+}
+
+.app-shell.vn .nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 12px 0 4px;
+  color: var(--ink-faint);
+  border: none;
+  background: none;
+}
+
+.app-shell.vn .nav-item svg {
+  width: 22px;
+  height: 22px;
+}
+
+.app-shell.vn .nav-item span {
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.app-shell.vn .nav-item.active {
+  color: var(--ink);
+}
+
+.app-shell.vn .card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: none;
+  width: 100%;
+  text-align: left;
+}
+
+.app-shell.vn .card.accent-amber {
+  border-color: rgba(169, 115, 46, 0.35);
+}
+
+.app-shell.vn .card.accent-amber::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--amber);
+}
+
+.app-shell.vn .card-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.app-shell.vn .card-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--paper);
+}
+
+.app-shell.vn .card-icon.amber {
+  background: var(--amber-wash);
+  color: var(--amber);
+}
+
+.app-shell.vn .card-icon.teal {
+  background: var(--teal-wash);
+  color: var(--teal);
+}
+
+.app-shell.vn .card-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.app-shell.vn .card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-shell.vn .card-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.app-shell.vn .card-sub {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+  line-height: 1.35;
+}
+
+.app-shell.vn .card-time {
+  font-size: 12px;
+  color: var(--ink-faint);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.app-shell.vn .row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 4px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.app-shell.vn .row-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+
+.app-shell.vn .row-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.app-shell.vn .row-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-shell.vn .row-title {
+  font-size: 14.5px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.app-shell.vn .row-sub {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  margin-top: 1px;
+}
+
+.app-shell.vn .row-time {
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.app-shell.vn .cam-visual {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 60% 50% at 72% 18%, rgba(255, 214, 150, 0.16) 0%, rgba(255, 214, 150, 0) 60%),
+    radial-gradient(ellipse 90% 75% at 30% 100%, #3a322b 0%, #221d18 55%, #131110 100%);
+}
+
+.app-shell.vn .cam-visual img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #131110;
+}
+
+.app-shell.vn .cam-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(19, 17, 16, 0.55);
+  backdrop-filter: blur(2px);
+  padding: 4px 9px 4px 7px;
+  border-radius: 20px;
+}
+
+.app-shell.vn .cam-badge .dot {
+  background: var(--teal);
+  width: 6px;
+  height: 6px;
+}
+
+.app-shell.vn .cam-badge .dot::after {
+  border-color: var(--teal);
+}
+
+.app-shell.vn .cam-badge span {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #efeae0;
+  letter-spacing: 0.02em;
+}
+
+.app-shell.vn .cam-time {
+  position: absolute;
+  bottom: 9px;
+  left: 11px;
+  z-index: 2;
+  font-size: 11px;
+  color: rgba(239, 234, 224, 0.85);
+  letter-spacing: 0.01em;
+}
+
+.app-shell.vn .cam-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 2px 20px 14px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  width: calc(100% - 40px);
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-shell.vn .cam-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.app-shell.vn .cam-thumb .cam-badge {
+  padding: 3px 6px 3px 5px;
+  top: 5px;
+  left: 5px;
+}
+
+.app-shell.vn .cam-thumb .cam-badge span {
+  display: none;
+}
+
+.app-shell.vn .cam-thumb .cam-time {
+  display: none;
+}
+
+.app-shell.vn .cam-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-shell.vn .cam-card-title {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.app-shell.vn .cam-card-sub {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  margin-top: 1px;
+}
+
+.app-shell.vn .cam-card .chev {
+  color: var(--ink-faint);
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.app-shell.vn .strip {
+  display: flex;
+  gap: 20px;
+  padding: 14px 20px 20px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+
+.app-shell.vn .strip-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.app-shell.vn .strip-item svg {
+  width: 14px;
+  height: 14px;
+}
+
+.app-shell.vn .strip-item b {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.app-shell.vn .live-panel {
+  margin: 4px 20px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--card);
+  overflow: hidden;
+}
+
+.app-shell.vn .live-panel .cam-visual {
+  height: 216px;
+}
+
+.app-shell.vn .focus-info {
+  padding: 18px 20px 20px;
+  text-align: center;
+}
+
+.app-shell.vn .focus-target {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.app-shell.vn .focus-detail {
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  margin-top: 4px;
+}
+
+.app-shell.vn .progress-track {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border-strong);
+  margin: 16px auto 0;
+  width: 70%;
+  overflow: hidden;
+}
+
+.app-shell.vn .progress-fill {
+  height: 100%;
+  background: var(--teal);
+  border-radius: 3px;
+  width: 0;
+}
+
+.app-shell.vn .pause-wrap {
+  padding: 2px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-shell.vn .btn-outline {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.app-shell.vn .btn-outline svg {
+  width: 16px;
+  height: 16px;
+}
+
+.app-shell.vn .btn-outline.confirm {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #f5f2eb;
+}
+
+.app-shell.vn .btn-outline:disabled {
+  opacity: 0.45;
+}
+
+.app-shell.vn .tabs {
+  display: flex;
+  gap: 6px;
+  padding: 4px 20px 14px;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.app-shell.vn .tab {
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 13px;
+  border-radius: 20px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
+.app-shell.vn .tab.on {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+.app-shell.vn .day-summary {
+  padding: 4px 0 2px;
+}
+
+.app-shell.vn .day-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.app-shell.vn .day-count {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+.app-shell.vn .day-count b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.app-shell.vn .set-group {
+  margin: 0 0 18px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+
+.app-shell.vn .set-row,
+.app-shell.vn .person-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+}
+
+.app-shell.vn .set-row:last-child,
+.app-shell.vn .person-row:last-child {
+  border-bottom: none;
+}
+
+.app-shell.vn .set-row svg {
+  flex-shrink: 0;
+  color: var(--ink-soft);
+  width: 19px;
+  height: 19px;
+}
+
+.app-shell.vn .set-row .t,
+.app-shell.vn .person-row .t {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.app-shell.vn .person-row .t {
+  font-weight: 600;
+}
+
+.app-shell.vn .person-row .s {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  margin-top: 1px;
+}
+
+.app-shell.vn .chev {
+  color: var(--ink-faint);
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0;
+}
+
+.app-shell.vn .set-note {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.app-shell.vn .vn-back {
+  border: 0;
+  background: none;
+  color: var(--teal);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0 0 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell.vn .dot.tracking::after {
+    animation: none;
+  }
+}

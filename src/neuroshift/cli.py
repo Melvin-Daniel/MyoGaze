@@ -4,7 +4,34 @@ from __future__ import annotations
 
 import argparse
 import json
+import socket
 from pathlib import Path
+
+
+def _lan_ips() -> list[str]:
+    """Candidate addresses the phone app can be pointed at.
+
+    The default-route address comes first, but it is only a guess: on a laptop
+    with both Ethernet and Wi-Fi it names the wrong adapter when the phone is on
+    Wi-Fi, so every local IPv4 is listed and the user picks the matching subnet.
+    """
+    found: list[str] = []
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            found.append(str(s.getsockname()[0]))
+    except OSError:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            found.append(str(info[4][0]))
+    except OSError:
+        pass
+    return [
+        ip
+        for i, ip in enumerate(found)
+        if ip not in found[:i] and not ip.startswith(("127.", "169.254."))
+    ]
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -37,6 +64,8 @@ def _build_parser() -> argparse.ArgumentParser:
     serve = sub.add_parser("serve", help="Run Control App API + PWA (phone/desktop)")
     serve.add_argument("--host", default="0.0.0.0")
     serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument("--ssl-port", type=int, default=8443, help="HTTPS port for iPhone camera")
+    serve.add_argument("--no-ssl", action="store_true", help="Do not start the HTTPS listener")
     serve.add_argument("--reload", action="store_true")
 
     return p
@@ -66,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Root: {root}")
         print(f"Config emg_mode={cfg.emg_mode} dwell={cfg.dwell_seconds}s")
         print(f"Face model: {(root / 'models' / 'face_landmarker.task').exists()}")
-        print(f"YOLO weights: {(root / 'yolov8n.pt').exists()}")
+        print(f"YOLO weights: {cfg.yolo_model}")
         try:
             import cv2  # noqa: F401
             import mediapipe  # noqa: F401
@@ -85,12 +114,65 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.cmd == "serve":
+        import threading
+
         import uvicorn
 
-        print(f"NeuroShift Control App v{__version__}")
-        print(f"Open on this PC:  http://127.0.0.1:{args.port}")
-        print(f"Open on phone:    http://<your-lan-ip>:{args.port}")
-        print("API docs:         http://127.0.0.1:%d/docs" % args.port)
+        from .devcert import ensure_dev_certs
+
+        candidates = _lan_ips() or ["<your-lan-ip>"]
+        ssl_pair = None if getattr(args, "no_ssl", False) else ensure_dev_certs(
+            [ip for ip in candidates if ip != "<your-lan-ip>"]
+        )
+        ssl_port = int(getattr(args, "ssl_port", 8443))
+        banner = [
+            f"NeuroShift Control App v{__version__}",
+            f"Open on this PC:  http://127.0.0.1:{args.port}",
+            f"API docs:         http://127.0.0.1:{args.port}/docs",
+            "",
+            "Laptop / Android app — HTTP:",
+        ]
+        banner += [f"    http://{ip}:{args.port}" for ip in candidates]
+        if ssl_pair:
+            banner += [
+                "",
+                "iPhone (no Mac / no App Store): open this HTTP page in Safari,",
+                "install the certificate, then Add to Home Screen. Do not use Visit Website:",
+            ]
+            banner += [f"    http://{ip}:{args.port}/iphone" for ip in candidates]
+            banner += ["Then open:"]
+            banner += [f"    https://{ip}:{ssl_port}" for ip in candidates]
+        else:
+            banner += [
+                "",
+                "HTTPS is off — iPhone Safari will block the camera on HTTP.",
+                "Install the 'cryptography' package and restart serve, or use the Android app.",
+            ]
+        banner += [
+            "",
+            f"Install the Android app: http://{candidates[0]}:{args.port}/app.apk",
+        ]
+        # uvicorn logs to stderr; flush so this banner is not stuck in the buffer
+        print("\n".join(banner), flush=True)
+
+        if ssl_pair:
+            cert_path, key_path = ssl_pair
+
+            def _run_https() -> None:
+                config = uvicorn.Config(
+                    "src.neuroshift.api.app:app",
+                    host=args.host,
+                    port=ssl_port,
+                    ssl_certfile=str(cert_path),
+                    ssl_keyfile=str(key_path),
+                    log_level="warning",
+                )
+                server = uvicorn.Server(config)
+                server.install_signal_handlers = lambda: None  # type: ignore[method-assign]
+                server.run()
+
+            threading.Thread(target=_run_https, daemon=True, name="https").start()
+
         uvicorn.run(
             "src.neuroshift.api.app:app",
             host=args.host,

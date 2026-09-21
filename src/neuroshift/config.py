@@ -17,7 +17,11 @@ class Config:
     mirror_preview: bool = True
 
     # Gaze selection (Phase-1 head/face proxy)
-    dwell_seconds: float = 0.55
+    dwell_seconds: float = 2.0
+    # Phase-I experiment: False = instant gaze select (Sakthimohan-style baseline)
+    dwell_required: bool = True
+    # When true, a finished look-and-hold toggles the device. No Confirm tap / EMG.
+    dwell_actuates: bool = True
     gaze_select_threshold: float = 0.50
     # How far you must turn head to leave center (Fan)
     yaw_side_threshold: float = 0.20
@@ -25,11 +29,16 @@ class Config:
     yaw_hysteresis: float = 0.10
     # EMA on yaw/pitch (higher = snappier, lower = smoother)
     gaze_smooth_alpha: float = 0.28
+    # When the top two aim scores differ by less than this, refuse to pick
+    gaze_ambiguity_margin: float = 0.10
+    # Eyes still steer a glance; head keeps a real look at the object stable
+    gaze_eye_weight: float = 0.72
 
-    # YOLO appliance stand-ins (COCO classes until custom lamp/fan model)
-    yolo_model: str = "yolov8n.pt"
-    yolo_conf: float = 0.35
-    yolo_every_n_frames: int = 2
+    # Open-vocab YOLOE (not COCO). COCO has no PC-fan class.
+    yolo_model: str = "yoloe-26s-seg.pt"
+    yolo_conf: float = 0.12
+    yolo_every_n_frames: int = 4
+    yolo_imgsz: int = 416
 
     # Fake EMG until MyoWare + ESP32 arrive
     # keyboard = SPACE pulse | mouse = vertical effort | hardware = serial | script = mock
@@ -52,6 +61,9 @@ class Config:
     mqtt_enabled: bool = False
     mqtt_host: str = "127.0.0.1"
     mqtt_port: int = 1883
+    # USB cable to the ESP32 hub (COM4 on this laptop). Survives Wi-Fi drops.
+    hub_serial_port: str = ""
+    hub_serial_baud: int = 115200
 
     # Product / mock / live stream
     product_name: str = "NeuroShift"
@@ -60,10 +72,10 @@ class Config:
     # Live web stream (lower = faster, less lag)
     live_frame_width: int = 640
     live_frame_height: int = 480
-    live_preview_max_width: int = 480
-    live_jpeg_quality: int = 45
-    live_preview_every_n: int = 2
-    live_target_fps: float = 12.0
+    live_preview_max_width: int = 400
+    live_jpeg_quality: int = 42
+    live_preview_every_n: int = 1
+    live_target_fps: float = 20.0
     # Live Phase-1: YOLO object targeting on by default; slots if none found
     live_use_yolo: bool = True
     live_yaw_side_threshold: float = 0.28

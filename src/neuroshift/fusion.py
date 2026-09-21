@@ -26,12 +26,23 @@ class IntentionFusion:
         gaze_confidence: float,
         emg_score: float,
         emg_confirmed: bool,
+        ambiguous: bool = False,
     ) -> Decision:
+        emg_ok = emg_confirmed and emg_score >= self.cfg.emg_confirm_threshold
+
+        if ambiguous:
+            return Decision(
+                action=self.cfg.abstain_label,
+                selected_device=None,
+                reason="ambiguous_gaze_targets",
+                gaze_ok=False,
+                emg_ok=emg_ok,
+            )
+
         gaze_ok = (
             selected_device is not None
             and gaze_confidence >= self.cfg.gaze_select_threshold
         )
-        emg_ok = emg_confirmed and emg_score >= self.cfg.emg_confirm_threshold
 
         if gaze_ok and emg_ok:
             return Decision(

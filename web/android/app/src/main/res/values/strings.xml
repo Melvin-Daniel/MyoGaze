@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">MyoGaze</string>
+    <string name="title_activity_main">MyoGaze</string>
+    <string name="package_name">in.myogaze.app</string>
+    <string name="custom_url_scheme">in.myogaze.app</string>
+</resources>

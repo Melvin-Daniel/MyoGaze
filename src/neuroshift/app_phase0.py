@@ -105,6 +105,8 @@ def main() -> None:
             enabled=cfg.mqtt_enabled,
             host=cfg.mqtt_host,
             port=cfg.mqtt_port,
+            hub_serial_port=getattr(cfg, "hub_serial_port", ""),
+            hub_serial_baud=getattr(cfg, "hub_serial_baud", 115200),
         )
     )
     emg_history: deque[float] = deque(maxlen=80)
@@ -137,7 +139,7 @@ def main() -> None:
     print(f"Publisher mode -> {publisher.mode}")
     if detector.available:
         print(
-            "YOLO ready. Stand-ins: bottle=Lamp, cup=Fan, phone=Plug, "
+            "YOLO ready. Stand-ins: bottle=Lamp, phone=Plug, "
             "remote=AC, book/laptop=TV"
         )
     else:
