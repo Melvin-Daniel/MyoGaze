@@ -14,8 +14,8 @@ const config: CapacitorConfig = {
     scheme: 'MyoGaze',
   },
   server: {
-    // Load the laptop Control App in the WebView so Sign in is same-origin.
-    url: 'http://192.168.1.10:8000',
+    // Bundled UI + Connect screen (LAN IP, Tailscale IP, or https://… tunnel URL).
+    // Do not set `url` here — a hardcoded LAN address breaks APK installs on other networks.
     androidScheme: 'http',
     iosScheme: 'https',
     cleartext: true,

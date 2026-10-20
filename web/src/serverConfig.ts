@@ -10,6 +10,18 @@ import { LAN_SERVER_HINT } from "./lanHint";
 
 const STORAGE_KEY = "myogaze.serverBase";
 
+function isPrivateLanHost(host: string): boolean {
+  if (!host || host === "localhost" || host === "127.0.0.1") return true;
+  if (/^192\.168\./.test(host)) return true;
+  if (/^10\./.test(host)) return true;
+  const m = /^172\.(\d+)\./.exec(host);
+  if (m) {
+    const n = Number(m[1]);
+    if (n >= 16 && n <= 31) return true;
+  }
+  return false;
+}
+
 function normalize(raw: string): string {
   let value = raw.trim();
   if (!value) return "";
@@ -18,12 +30,16 @@ function normalize(raw: string): string {
     value = `${port === "8443" ? "https" : "http"}://${value}`;
   }
   value = value.replace(/\/+$/, "");
-  // Bare host or host without port → assume the default backend port
-  if (!/:\d+$/.test(value.replace(/^https?:\/\//i, ""))) {
-    const https = /^https:/i.test(value);
-    value = `${value}:${https ? "8443" : "8000"}`;
+  try {
+    const url = new URL(value);
+    if (!url.port) {
+      if (url.protocol === "https:" && isPrivateLanHost(url.hostname)) url.port = "8443";
+      else if (url.protocol === "http:" && isPrivateLanHost(url.hostname)) url.port = "8000";
+    }
+    return url.port ? `${url.protocol}//${url.hostname}:${url.port}` : url.origin;
+  } catch {
+    return value;
   }
-  return value;
 }
 
 export function isNativeApp(): boolean {
@@ -122,7 +138,10 @@ export async function probeServer(candidate: string): Promise<{ ok: boolean; mes
     const body = (await res.json()) as { version?: string };
     return { ok: true, message: `Connected to MyoGaze ${body.version ?? ""}`.trim() };
   } catch {
-    return { ok: false, message: "No response — check Wi-Fi, IP address, and firewall" };
+    return {
+      ok: false,
+      message: "No response — check the address, that the laptop server is running, and firewall/VPN.",
+    };
   }
 }
 
