@@ -36,9 +36,15 @@ class Config:
 
     # Open-vocab YOLOE (not COCO). COCO has no PC-fan class.
     yolo_model: str = "yoloe-26s-seg.pt"
+    # Optional one-class fan fine-tune (scripts/train_fan.py). Empty = heuristics only.
+    yolo_fan_model: str = ""
     yolo_conf: float = 0.12
+    # Minimum score to accept a custom fine-tuned lamp/fan box (reduces random locks).
+    yolo_custom_min_conf: float = 0.35
     yolo_every_n_frames: int = 4
     yolo_imgsz: int = 416
+    # Live object mode: shape + template fan finder (and fan YOLO when yolo_fan_model is set).
+    live_detect_fans: bool = True
 
     # Fake EMG until MyoWare + ESP32 arrive
     # keyboard = SPACE pulse | mouse = vertical effort | hardware = serial | script = mock

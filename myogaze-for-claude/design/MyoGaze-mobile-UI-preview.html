@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en" data-text="m" data-contrast="off" data-motion="on">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MyoGaze – UI preview</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+:root{--bg:#EEF2F1;--surf:#fff;--ink:#11222B;--mute:#5B6B72;--line:#D8E0DE;--teal:#0F6B63;--teal-s:#D9EEEA;--amber:#B97A06;--amber-s:#FBEFD2;--lamp:#F2B632;--scale:1;--r:20px;
+ --safe-t:env(safe-area-inset-top,0px);--safe-b:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0C171D;--surf:#14252D;--ink:#EAF2F0;--mute:#9DB0B5;--line:#244049;--teal:#4FC2B4;--teal-s:#12373A;--amber:#F0B445;--amber-s:#3A2D10}}
+:root[data-theme="dark"]{--bg:#0C171D;--surf:#14252D;--ink:#EAF2F0;--mute:#9DB0B5;--line:#244049;--teal:#4FC2B4;--teal-s:#12373A;--amber:#F0B445;--amber-s:#3A2D10}
+html[data-text="l"]{--scale:1.15}html[data-text="xl"]{--scale:1.3}
+html[data-contrast="on"]{--mute:var(--ink);--line:var(--ink)}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:500 calc(16px*var(--scale))/1.4 Figtree,system-ui,sans-serif;display:flex;justify-content:center}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+#app{width:100%;max-width:480px;height:100%;display:flex;flex-direction:column;position:relative;overflow:hidden}
+main{flex:1;overflow-y:auto;padding:calc(var(--safe-t) + 20px) 18px 24px}
+h1{font-size:1.7em;line-height:1.15;margin:0 0 4px;font-weight:700;letter-spacing:-.02em}
+h2{font-size:1.05em;margin:22px 0 10px;font-weight:700}
+.sub{color:var(--mute);margin:0 0 18px}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.row{display:flex;align-items:center;gap:14px}
+.grow{flex:1;min-width:0}
+.tap{width:100%;text-align:left;background:var(--surf);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-height:56px}
+.stack>*+*{margin-top:10px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:99px;font-weight:600;font-size:.9em;background:var(--teal-s);color:var(--teal)}
+.pill i{width:8px;height:8px;border-radius:50%;background:currentColor}
+.pill.amber{background:var(--amber-s);color:var(--amber)}
+.pill.off{background:var(--line);color:var(--mute)}
+.hero{background:var(--teal);color:#fff;border:0;display:block;width:100%;text-align:left;border-radius:28px;padding:22px}
+:root:not([data-theme]) .hero{color:#fff}
+.hero b{font-size:2.3em;letter-spacing:-.03em;display:block;line-height:1.05}
+.hero small{opacity:.85}
+.sw{width:62px;height:36px;border-radius:99px;background:var(--line);border:0;position:relative;flex:none;transition:background .2s}
+.sw::after{content:"";position:absolute;top:4px;left:4px;width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 1px 3px #0004;transition:transform .2s}
+.sw[aria-checked=true]{background:var(--teal)}
+.sw[aria-checked=true]::after{transform:translateX(26px)}
+.sw:disabled{opacity:.4}
+.ico{width:48px;height:48px;border-radius:16px;background:var(--bg);display:grid;place-items:center;flex:none}
+.ico svg{width:30px;height:30px}
+.lampon{filter:drop-shadow(0 0 6px var(--lamp))}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stats .card{padding:12px}.stats b{font-size:1.6em;display:block}.stats span{color:var(--mute);font-size:.85em}
+.alert{background:var(--amber-s);border:1px solid var(--amber);color:var(--ink);border-radius:var(--r);padding:14px 16px;width:100%;text-align:left}
+.alert strong{color:var(--amber)}
+nav{display:grid;grid-template-columns:repeat(4,1fr);background:var(--surf);border-top:1px solid var(--line);padding:6px 6px calc(6px + var(--safe-b))}
+nav button{background:none;border:0;border-radius:16px;min-height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--mute);font-size:.78em;font-weight:600}
+nav button[aria-current=page]{color:var(--teal);background:var(--teal-s)}
+nav svg{width:24px;height:24px}
+/* live */
+.frame{position:relative;aspect-ratio:4/3;border-radius:24px;overflow:hidden;background:#1B2E36;border:1px solid var(--line)}
+.frame svg.scene{position:absolute;inset:0;width:100%;height:100%}
+.box{position:absolute;border:2px solid #ffffff90;border-radius:12px;transition:all .25s}
+.box.cand{border-color:#F0B445;border-style:dashed}
+.box.sel{border-color:#6EE0CF;border-width:3px;box-shadow:0 0 0 4px #6EE0CF40;animation:pulse 1.2s infinite}
+.box em{position:absolute;top:-24px;left:-2px;background:#000a;color:#fff;font:600 12px Figtree,sans-serif;padding:2px 8px;border-radius:8px;font-style:normal;white-space:nowrap}
+.gaze{position:absolute;width:20px;height:20px;margin:-10px;border-radius:50%;background:#fff;box-shadow:0 0 0 6px #fff4;transition:left .5s,top .5s}
+.off .gaze{opacity:0}
+@keyframes pulse{50%{box-shadow:0 0 0 9px #6EE0CF10}}
+html[data-motion="off"] *{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.status{display:flex;gap:16px;align-items:center;margin-top:14px}
+.ring{--pct:0;width:84px;height:84px;border-radius:50%;flex:none;background:conic-gradient(var(--c,var(--teal)) calc(var(--pct)*1%),var(--line) 0);display:grid;place-items:center}
+.ring::before{content:"";width:66px;height:66px;border-radius:50%;background:var(--bg);grid-area:1/1}
+.ring span{grid-area:1/1;z-index:1;font-weight:700}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.btn{min-height:56px;border-radius:18px;border:1px solid var(--line);background:var(--surf);font-weight:600}
+.btn.pri{background:var(--teal);border-color:var(--teal);color:#fff}
+:root[data-theme="dark"] .btn.pri,.dk .btn.pri{color:#06201D}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}
+.chip{border:1px solid var(--line);background:var(--surf);border-radius:99px;padding:8px 16px;min-height:44px;white-space:nowrap;font-weight:600}
+.chip[aria-pressed=true]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+.back{background:none;border:0;color:var(--teal);font-weight:600;min-height:44px;padding:0;margin-bottom:6px}
+.toast{position:absolute;left:18px;right:18px;bottom:96px;background:var(--ink);color:var(--bg);padding:14px 16px;border-radius:16px;transform:translateY(30px);opacity:0;transition:all .25s;pointer-events:none}
+.toast.on{transform:none;opacity:1}
+.sim{font-size:.75em;color:var(--mute);text-align:center;margin-top:18px}
+</style>
+</head>
+<body>
+<div id="app">
+ <main id="view" aria-live="off"></main>
+ <div class="toast" id="toast" role="status"></div>
+ <nav aria-label="Main"></nav>
+</div>
+<script>
+const $=s=>document.querySelector(s);
+const I={home:'<path d="M4 11l8-7 8 7v9H4z"/>',live:'<circle cx="12" cy="12" r="3"/><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/>',activity:'<path d="M3 12h4l3-8 4 16 3-8h4"/>',settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/>'};
+const svg=(p,x='')=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${x}>${p}</svg>`;
+const lampSvg=on=>`<svg viewBox="0 0 32 32" class="${on?'lampon':''}"><path d="M10 6h12l4 12H6z" fill="${on?'#F2B632':'#9DB0B5'}"/><rect x="15" y="18" width="2" height="8" fill="#5B6B72"/><rect x="10" y="26" width="12" height="3" rx="1.5" fill="#5B6B72"/></svg>`;
+const fanSvg=on=>`<svg viewBox="0 0 32 32"><g style="transform-origin:16px 16px;${on?'animation:spin 1s linear infinite':''}" fill="${on?'#4FC2B4':'#9DB0B5'}"><path d="M16 15c-1-6 0-10 4-10s3 7-4 10z"/><path d="M17 16c6-1 10 0 10 4s-7 3-10-4z"/><path d="M16 17c1 6 0 10-4 10s-3-7 4-10z"/><path d="M15 16c-6 1-10 0-10-4s7-3 10 4z"/></g><circle cx="16" cy="16" r="2.5" fill="#5B6B72"/></svg><style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
+const S={tab:'home',panel:null,sub:'',online:true,running:false,filter:'all',
+ dev:{lamp:{label:'Desk lamp',on:false,n:0},fan:{label:'PC fan',on:true,n:0}},
+ act:[{t:'09:12',k:'toggle',x:'Desk lamp turned on'},{t:'09:05',k:'unsure',x:'Not sure which one you meant — nothing switched'},{t:'08:58',k:'look',x:'Looked at PC fan'}],
+ g:{phase:'idle',pct:0,target:null,gaze:[.5,.5],title:'Paused',detail:'Tap Resume to start watching the room.'}};
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.h);toast.h=setTimeout(()=>e.classList.remove('on'),2200)}
+function log(k,x){const d=new Date();S.act.unshift({t:d.toTimeString().slice(0,5),k,x});}
+function toggle(id){const d=S.dev[id];d.on=!d.on;d.n++;log('toggle',`${d.label} turned ${d.on?'on':'off'}`);toast(`${d.label} ${d.on?'on':'off'}`);render()}
+/* simulated engine: replace with useNeuroShift() in the React build */
+const seq=[['searching',1400,null,[.5,.5],'Looking around…','Finding lamp and fan in the room.'],['seeing',900,'lamp',[.25,.55],'I can see your lamp','Keep looking at it to switch it.'],['dwell',2000,'lamp',[.25,.55],'Hold your gaze','Locking onto the lamp…'],['confirmed',1400,'lamp',[.25,.55],'Lamp toggled','Done. Looking away resets.'],['searching',1200,null,[.5,.3],'Looking around…','Finding lamp and fan in the room.'],['unsure',2400,'fan',[.55,.55],'Not sure — nothing switched','Looking between lamp and fan. Staying safe.']];
+let si=0,st=0;
+setInterval(()=>{if(!S.running||!S.online)return;const q=seq[si],el=Date.now()-st;if(!st)st=Date.now();
+ const g=S.g;g.phase=q[0];g.target=q[2];g.gaze=q[3];g.title=q[4];g.detail=q[5];g.pct=q[0]=='dwell'?Math.min(100,el/q[1]*100):q[0]=='confirmed'?100:0;
+ if(el>=q[1]){if(q[0]=='confirmed')toggle('lamp');if(q[0]=='unsure')log('unsure','Not sure which one you meant — nothing switched');si=(si+1)%seq.length;st=Date.now()}
+ if(S.tab=='live')paintLive()},80);
+const POS={lamp:[.12,.32,.38,.78],fan:[.58,.35,.88,.8]};
+function paintLive(){const g=S.g,f=$('.frame');if(!f)return;
+ f.className='frame'+(S.running?'':' off');
+ ['lamp','fan'].forEach(id=>{const b=$('#b-'+id),p=POS[id];b.style.cssText=`left:${p[0]*100}%;top:${p[1]*100}%;width:${(p[2]-p[0])*100}%;height:${(p[3]-p[1])*100}%`;
+  const hit=S.running&&g.target==id;b.className='box'+(hit&&(g.phase=='dwell'||g.phase=='confirmed')?' sel':hit&&g.phase!='searching'?' cand':'')});
+ $('#gz').style.cssText=`left:${g.gaze[0]*100}%;top:${g.gaze[1]*100}%`;
+ const r=$('#ring'),warm=g.phase=='unsure';r.style.setProperty('--pct',g.pct);r.style.setProperty('--c',warm?'var(--amber)':'var(--teal)');
+ r.firstElementChild.textContent=g.phase=='dwell'?Math.round(g.pct/50*10)/10+'s':g.phase=='confirmed'?'✓':warm?'–':'';
+ $('#gt').textContent=S.running?g.title:'Paused';$('#gd').textContent=S.running?g.detail:'Tap Resume to start watching the room.';
+ const p=$('#lp');p.className='pill'+(!S.online?' off':warm?' amber':S.running?'':' off');p.lastChild.textContent=!S.online?'Offline':S.running?(warm?'Unsure':'Looking'):'Paused'}
+const dev=(id)=>{const d=S.dev[id];return `<div class="card row"><div class="ico">${id=='lamp'?lampSvg(d.on):fanSvg(d.on)}</div><div class="grow"><b>${d.label}</b><br><span class="sub" style="margin:0">${d.on?'On':'Off'} · ${d.n} toggles today</span></div><button class="sw" role="switch" aria-checked="${d.on}" aria-label="${d.label}" ${S.online?'':'disabled'} onclick="toggle('${id}')"></button></div>`};
+const unsure=()=>S.act.filter(a=>a.k=='unsure').length;
+const dotc={toggle:'var(--teal)',unsure:'var(--amber)',look:'var(--mute)'};
+const item=a=>`<div class="row" style="padding:10px 0"><span class="dot" style="background:${dotc[a.k]}"></span><div class="grow">${a.x}</div><span class="sub" style="margin:0">${a.t}</span></div>`;
+const V={
+home(){const n=S.act.filter(a=>a.k=='toggle').length;return `<h1>Good morning, Melvin</h1><p class="sub">Melvin’s room</p>
+<button class="hero" onclick="go('live')"><small>${S.online?(S.running?'Watching your room':'Ready when you are'):'Laptop offline'}</small><b>2h 14m</b><small>tracked today · Open live view</small></button>
+<h2>Your appliances</h2><div class="stack">${dev('lamp')}${dev('fan')}</div>
+${unsure()?`<h2>Needs a look</h2><button class="alert" onclick="S.filter='unsure';go('activity')"><strong>${unsure()} unsure moment${unsure()>1?'s':''}.</strong> Nothing was switched, so you’re safe. Review</button>`:''}
+<h2>Today</h2><div class="stats"><div class="card"><b>${S.act.filter(a=>a.k=='look').length+12}</b><span>Looks</span></div><div class="card"><b>${n}</b><span>Toggles</span></div><div class="card"><b>${unsure()}</b><span>Unsure</span></div></div>
+<h2>Recent</h2><div class="card">${S.act.slice(0,3).map(item).join('')}</div>
+<p class="sub" style="margin-top:16px">${S.online?'Laptop online':'Laptop unreachable — reconnecting…'} · Camera ${S.running?'on':'idle'}</p>`},
+live(){return `<div class="row" style="justify-content:space-between;margin-bottom:12px"><h1 style="margin:0">Live</h1><span class="pill" id="lp"><i></i>Looking</span></div>
+<div class="frame" role="img" aria-label="Live room view"><svg class="scene" viewBox="0 0 400 300" preserveAspectRatio="none"><rect width="400" height="300" fill="#1B2E36"/><rect y="215" width="400" height="85" fill="#243B45"/><path d="M60 140h80l20 70H40z" fill="${S.dev.lamp.on?'#F2B632':'#6D8790'}"/><rect x="96" y="200" width="8" height="30" fill="#3A525C"/><circle cx="290" cy="170" r="52" fill="none" stroke="${S.dev.fan.on?'#6EE0CF':'#6D8790'}" stroke-width="6"/><circle cx="290" cy="170" r="8" fill="#6D8790"/></svg>
+<div class="box" id="b-lamp"><em>Lamp</em></div><div class="box" id="b-fan"><em>Fan</em></div><div class="gaze" id="gz"></div></div>
+<div class="status" role="status" aria-live="polite"><div class="ring" id="ring"><span></span></div><div class="grow"><b id="gt" style="font-size:1.15em"></b><div class="sub" id="gd" style="margin:0"></div></div></div>
+<div class="btns"><button class="btn pri" onclick="S.running=!S.running;st=0;si=0;render()">${S.running?'Pause':'Resume'}</button><button class="btn" onclick="toast('Calibrating gaze…')">Recalibrate</button></div>
+<p class="sub" style="margin-top:14px">Hold your gaze on the lamp or fan for about 2 seconds to toggle it.</p><h2>Just now</h2><div class="card">${S.act.slice(0,3).map(item).join('')}</div>`},
+activity(){const F=[['all','All'],['toggle','Toggles'],['unsure','Unsure'],['look','Looks']];const l=S.act.filter(a=>S.filter=='all'||a.k==S.filter);
+return `<h1>Activity</h1><p class="sub">Everything MyoGaze saw and did.</p><div class="chips">${F.map(f=>`<button class="chip" aria-pressed="${S.filter==f[0]}" onclick="S.filter='${f[0]}';render()">${f[1]}</button>`).join('')}</div><h2>Today</h2>
+${l.length?`<div class="card">${l.map(item).join('')}</div>`:`<div class="card" style="text-align:center;padding:32px"><b>Nothing here yet</b><p class="sub" style="margin:6px 0 0">Look at your lamp or fan and it will show up.</p></div>`}`},
+settings(){const P=S.panel;if(P=='acc')return `<button class="back" onclick="S.panel=null;render()">‹ Settings</button><h1>Accessibility</h1><p class="sub">Applies instantly across the app.</p><div class="stack"><div class="card"><b>Text size</b><div class="chips" style="margin-top:10px">${[['m','Standard'],['l','Large'],['xl','Largest']].map(x=>`<button class="chip" aria-pressed="${document.documentElement.dataset.text==x[0]}" onclick="A('text','${x[0]}')">${x[1]}</button>`).join('')}</div></div>${[['contrast','High contrast','on','off'],['motion','Reduce motion','off','on'],['theme','Dark mode','dark','light']].map(x=>{const on=x[0]=='theme'?document.documentElement.dataset.theme=='dark':document.documentElement.dataset[x[0]]==x[2];return `<div class="card row"><b class="grow">${x[1]}</b><button class="sw" role="switch" aria-checked="${on}" aria-label="${x[1]}" onclick="A('${x[0]}','${on?x[3]:x[2]}')"></button></div>`}).join('')}</div>`;
+const L=['Laptop & camera','Calibration','Eye tracking','Look & hold','Break reminders','Account','Notifications','Accessibility','Appearance','Privacy','Help','About'];
+return `<h1>Settings</h1><p class="sub">Laptop ${S.online?'connected':'offline'}</p><div class="stack"><button class="tap row" onclick="S.online=!S.online;toast(S.online?'Laptop reconnected':'Laptop offline — nothing will switch');render()"><span class="grow">Simulate laptop ${S.online?'offline':'online'}</span></button>${L.map(x=>`<button class="tap row" onclick="${x=='Accessibility'?"S.panel='acc';render()":`toast('${x} opens here in the React build')`}"><span class="grow">${x}</span>›</button>`).join('')}</div>`}};
+function A(k,v){const r=document.documentElement;if(k=='theme')r.dataset.theme=v;else r.dataset[k]=v;render()}
+function go(t){S.tab=t;S.panel=null;if(t=='live'&&!S.running&&S.online){S.running=true;st=0;si=0}render()}
+function render(){$('#view').innerHTML=V[S.tab]()+(S.tab=='home'?'<p class="sim">Preview uses simulated data. The React build reads useNeuroShift().</p>':'');
+ $('nav').innerHTML=['home','live','activity','settings'].map(t=>`<button ${S.tab==t?'aria-current="page"':''} onclick="go('${t}')">${svg(I[t])}${t[0].toUpperCase()+t.slice(1)}</button>`).join('');
+ if(S.tab=='live')paintLive()}
+render();
+</script>
+</body>
+</html>

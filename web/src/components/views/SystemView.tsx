@@ -71,8 +71,9 @@ export function SystemView({ engine, account, onSignOut, section = "all" }: Syst
   const [serverInput, setServerInput] = useState(getServerBase());
   const [serverStatus, setServerStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const [probing, setProbing] = useState(false);
-  const lamps = engine.devices.filter((device) => /lamp|bulb|light/i.test(`${device.id} ${device.label}`));
-  const pairDevices = lamps.length ? lamps : engine.devices.slice(0, 1);
+  const pairDevices = engine.devices.filter((device) =>
+    /^(lamp|fan)$/i.test(device.id) || /lamp|bulb|light|fan/i.test(`${device.id} ${device.label}`),
+  );
 
   async function handleTestServer() {
     setProbing(true);
@@ -127,12 +128,14 @@ export function SystemView({ engine, account, onSignOut, section = "all" }: Syst
       )}
       {showPair && (
         <div className="panel">
-          <div className="panel__title">Lamp</div>
+          <div className="panel__title">Lamp &amp; fan</div>
           <div className="stack">
             {pairDevices.map((device) => (
               <div className="toggle-row" key={device.id} style={{ borderTop: "none", paddingTop: 0 }}>
                 <div>
-                  <div className="field__label">{device.label === "lamp" ? "Lamp" : device.label}</div>
+                  <div className="field__label">
+                    {device.id === "lamp" ? "Lamp" : device.id === "fan" ? "Fan" : device.label}
+                  </div>
                   <div className="field__hint">{device.is_on ? "On" : "Off"} — tap to override.</div>
                 </div>
                 <button

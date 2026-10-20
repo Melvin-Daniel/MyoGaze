@@ -16,6 +16,10 @@ runs/
 datasets/lamp/raw/
 datasets/lamp/images/
 datasets/lamp/labels/
+datasets/fan/raw/*
+!datasets/fan/raw/.gitkeep
+datasets/fan/images/
+datasets/fan/labels/
 .DS_Store
 Thumbs.db
 web/node_modules/

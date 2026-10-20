@@ -84,9 +84,13 @@ class DecisionPublisher:
             self._serial = None
             print(f"[hub] serial unavailable ({exc})", flush=True)
 
-    def _write_hub_command(self, command: str) -> bool:
-        """Send ON/OFF to the USB hub. Re-open COM port once if the handle went stale."""
-        line = f"{command}\n".encode("utf-8")
+    def _write_hub_actuate(self, body: dict) -> bool:
+        """Send JSON actuate line to the USB hub (device_id + command)."""
+        device = str(body.get("device_id") or body.get("device") or "lamp").strip()
+        command = str(body.get("command") or "").upper()
+        if command not in {"ON", "OFF"}:
+            command = "ON" if body.get("state") else "OFF"
+        line = (json.dumps({"device_id": device, "command": command}) + "\n").encode("utf-8")
         for attempt in range(2):
             if self._serial is None:
                 self._open_hub_serial()
@@ -95,7 +99,7 @@ class DecisionPublisher:
             try:
                 self._serial.write(line)
                 self._serial.flush()
-                print(f"[hub] serial actuate {command}", flush=True)
+                print(f"[hub] serial actuate {device} {command}", flush=True)
                 return True
             except Exception as exc:  # noqa: BLE001
                 print(f"[hub] serial write failed ({exc})", flush=True)
@@ -132,10 +136,7 @@ class DecisionPublisher:
     def _send(self, topic: str, body: dict) -> None:
         text = json.dumps(body)
         if topic.endswith("actuate"):
-            command = str(body.get("command") or "").upper()
-            if command not in {"ON", "OFF"}:
-                command = "ON" if body.get("state") else "OFF"
-            wrote = self._write_hub_command(command)
+            wrote = self._write_hub_actuate(body)
             if not wrote and self._serial is None and self._client is None:
                 print(f"[actuate] {text}", flush=True)
         if self._client is not None:

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MyoGaze — Label lamp</title>
+    <title>MyoGaze — Label</title>
     <style>
       :root {
         --bg: #f4f1ea;
@@ -83,25 +83,50 @@
   </head>
   <body>
     <header>
-      <h1>Draw a box on the bulb</h1>
-      <p>
-        Drag on the photo around the white globe only. Then Next. Do not box your face.
+      <h1 id="heading">Draw a box on the object</h1>
+      <p id="hint">
+        Drag on the photo around the object only. Then Save &amp; Next. Do not box your face.
         A green box may already be there — fix it if it is wrong.
       </p>
     </header>
     <div class="stage-wrap">
-      <div class="stage" id="stage" role="application" aria-label="lamp photo to label">
-        <img id="photo" alt="lamp photo" draggable="false" />
+      <div class="stage" id="stage" role="application" aria-label="photo to label">
+        <img id="photo" alt="training photo" draggable="false" />
         <div class="box" id="box" hidden></div>
       </div>
       <div class="stat" id="stat">Loading…</div>
       <div class="row">
         <button class="ghost" type="button" id="prev">Back</button>
         <button type="button" id="next">Save &amp; Next</button>
-        <button class="ghost" type="button" id="clear">No lamp in this photo</button>
+        <button class="ghost" type="button" id="clear">No object in this photo</button>
       </div>
     </div>
     <script>
+      const params = new URLSearchParams(location.search);
+      const dataset = (params.get("dataset") || "lamp").toLowerCase();
+      const qs = "?dataset=" + encodeURIComponent(dataset);
+      const copy = {
+        lamp: {
+          title: "Draw a box on the bulb",
+          hint:
+            "Drag on the photo around the white globe only. Then Save & Next. Do not box your face.",
+          empty: "No lamp in this photo",
+          none: "No photos in datasets/lamp/raw — add JPGs there first.",
+        },
+        fan: {
+          title: "Draw a box on the fan",
+          hint:
+            "Drag on the photo around the whole PC fan (blades + frame). Then Save & Next. Do not box your face.",
+          empty: "No fan in this photo",
+          none: "No photos in datasets/fan/raw — add JPGs there first.",
+        },
+      };
+      const ui = copy[dataset] || copy.lamp;
+      document.title = "MyoGaze — Label " + dataset;
+      document.getElementById("heading").textContent = ui.title;
+      document.getElementById("hint").textContent = ui.hint;
+      document.getElementById("clear").textContent = ui.empty;
+
       const photo = document.getElementById("photo");
       const stage = document.getElementById("stage");
       const boxEl = document.getElementById("box");
@@ -156,8 +181,9 @@
         i = Math.max(0, Math.min(items.length - 1, idx));
         const name = items[i];
         photo.onload = fit;
-        photo.src = "/api/label/image/" + encodeURIComponent(name) + "?t=" + Date.now();
-        const res = await fetch("/api/label/box/" + encodeURIComponent(name));
+        photo.src =
+          "/api/label/image/" + encodeURIComponent(name) + qs + "&t=" + Date.now();
+        const res = await fetch("/api/label/box/" + encodeURIComponent(name) + qs);
         const data = await res.json();
         box = data.box;
         stat.textContent = (i + 1) + " / " + items.length + "  —  " + name;
@@ -166,7 +192,7 @@
 
       async function save(andNext) {
         const name = items[i];
-        await fetch("/api/label/box/" + encodeURIComponent(name), {
+        await fetch("/api/label/box/" + encodeURIComponent(name) + qs, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ box }),
@@ -218,12 +244,12 @@
         };
       });
 
-      fetch("/api/label/list")
+      fetch("/api/label/list" + qs)
         .then((r) => r.json())
         .then((data) => {
           items = data.images || [];
           if (!items.length) {
-            stat.textContent = "No photos in datasets/lamp/raw — run python scripts/capture_lamp.py first.";
+            stat.textContent = ui.none;
             return;
           }
           load(typeof data.start === "number" ? data.start : 0);

@@ -180,7 +180,7 @@ export function deriveGazeStatus(input: {
       phase: "searching",
       kicker: "Searching",
       title: "Nothing in view yet",
-      detail: "Point the laptop camera at the lamp.",
+      detail: "Point the laptop camera at the lamp or fan.",
       shortLabel: "Searching",
     };
   }
@@ -190,7 +190,7 @@ export function deriveGazeStatus(input: {
     phase: "seeing",
     kicker: "In view",
     title: `${objectsInView} object${objectsInView === 1 ? "" : "s"} in view`,
-    detail: "Look at the lamp and hold for two seconds to toggle it.",
+    detail: "Look at the lamp or fan and hold for two seconds to toggle it.",
     shortLabel: "In view",
   };
 }

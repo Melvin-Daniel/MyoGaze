@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import threading
 import time
 
 import cv2
 import numpy as np
 
 from .config import Config, DEFAULT
+
+_CAMERA_LOCK = threading.RLock()
 
 
 def score_frame(frame: np.ndarray | None) -> float:
@@ -39,8 +42,21 @@ class Camera:
         self.opened_index = int(cfg.camera_index)
         self.opened_backend = "dshow"
 
+    @staticmethod
+    def _safe_set(cap: cv2.VideoCapture, prop: int, value: float) -> None:
+        try:
+            cap.set(prop, value)
+        except (cv2.error, OSError, ValueError):
+            pass
+
     def open(self) -> None:
         last_error = "Cannot open camera"
+        with _CAMERA_LOCK:
+            self._open_once(last_error_holder := [last_error])
+            return
+
+    def _open_once(self, last_error_holder: list[str]) -> None:
+        last_error = last_error_holder[0]
         indices = [int(self.cfg.camera_index)]
         for extra in range(0, 4):
             if extra not in indices:
@@ -64,29 +80,21 @@ class Camera:
                 if not cap.isOpened():
                     cap.release()
                     continue
-                try:
-                    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
-                except Exception:
-                    pass
-                cap.set(cv2.CAP_PROP_FRAME_WIDTH, int(self.cfg.frame_width))
-                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, int(self.cfg.frame_height))
-                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-                try:
-                    cap.set(cv2.CAP_PROP_FPS, 30)
-                except Exception:
-                    pass
-                try:
-                    cap.set(cv2.CAP_PROP_CONVERT_RGB, 1)
-                except Exception:
-                    pass
-                try:
-                    cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75)
-                except Exception:
-                    pass
+                self._safe_set(cap, cv2.CAP_PROP_BUFFERSIZE, 1)
+                self._safe_set(cap, cv2.CAP_PROP_FRAME_WIDTH, int(self.cfg.frame_width))
+                self._safe_set(cap, cv2.CAP_PROP_FRAME_HEIGHT, int(self.cfg.frame_height))
+                self._safe_set(cap, cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+                self._safe_set(cap, cv2.CAP_PROP_FPS, 30)
+                self._safe_set(cap, cv2.CAP_PROP_CONVERT_RGB, 1)
+                self._safe_set(cap, cv2.CAP_PROP_AUTO_EXPOSURE, 0.75)
                 local_best = -1.0
                 local_frame = None
                 for _ in range(14):
-                    ok, candidate = cap.read()
+                    try:
+                        ok, candidate = cap.read()
+                    except (cv2.error, OSError) as exc:
+                        last_error = f"Camera index {index} ({backend_name}): {exc}"
+                        break
                     if not ok:
                         time.sleep(0.03)
                         continue
@@ -125,6 +133,7 @@ class Camera:
                     cap.release()
 
         if best is None:
+            last_error_holder[0] = last_error
             raise RuntimeError(last_error)
 
         cap, index, backend_name, frame = best
@@ -160,6 +169,22 @@ class Camera:
         raise last or RuntimeError("Camera read failed")
 
     def release(self) -> None:
-        if self.cap is not None:
-            self.cap.release()
-            self.cap = None
+        with _CAMERA_LOCK:
+            if self.cap is not None:
+                self.cap.release()
+                self.cap = None
+                time.sleep(0.15)
+
+    def open_with_retry(self, attempts: int = 3) -> None:
+        """Windows DirectShow often needs a beat after release."""
+        last: Exception | None = None
+        for attempt in range(max(1, attempts)):
+            try:
+                self.open()
+                return
+            except Exception as exc:  # noqa: BLE001
+                last = exc
+                self.release()
+                if attempt + 1 < attempts:
+                    time.sleep(0.35 * (attempt + 1))
+        raise last or RuntimeError("Cannot open camera")

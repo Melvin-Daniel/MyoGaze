@@ -48,6 +48,9 @@ def _combine_look(head: float, eye: float, eye_weight: float) -> float:
         return _clip((1.0 - ew) * head + ew * eye)
     if mag_h >= 0.10:
         return _clip(0.62 * head + 0.38 * eye)
+    # Glasses often bias iris left/right when the head faces the camera — trust head more.
+    if mag_h < 0.12 and mag_e >= 0.07:
+        return _clip(0.78 * head + 0.22 * eye)
     return _clip((1.0 - ew) * head + ew * eye)
 
 

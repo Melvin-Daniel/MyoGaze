@@ -34,6 +34,28 @@ _FACE_LABELS = {
 }
 
 
+def _box_on_hair_band(
+    xyxy: tuple[int, int, int, int],
+    face_oval: tuple[float, float, float, float],
+) -> bool:
+    """Fan YOLO often fires on hair above the forehead."""
+    cx, cy, rx, ry = face_oval
+    if rx < 1 or ry < 1:
+        return False
+    x0, y0, x1, y1 = xyxy
+    box_cx = (x0 + x1) / 2.0
+    box_cy = (y0 + y1) / 2.0
+    hair_cy = cy - 0.42 * ry
+    hair_ry = ry * 1.08
+    nx = (box_cx - cx) / max(rx * 1.05, 1.0)
+    ny = (box_cy - hair_cy) / max(hair_ry, 1.0)
+    if nx * nx + ny * ny <= 1.0:
+        return True
+    if box_cy < cy - 0.48 * ry and abs(box_cx - cx) < 1.55 * rx:
+        return True
+    return False
+
+
 def box_on_face(xyxy: tuple[int, int, int, int], face_oval: tuple[float, float, float, float]) -> bool:
     """True when a box center sits in the face ellipse, or furniture wraps the head."""
     cx, cy, rx, ry = face_oval
@@ -84,14 +106,19 @@ def drop_boxes_on_face(
     kept: list[DetectedObject] = []
     for det in detections:
         blob = f"{det.label or ''} {det.appliance or ''}".lower()
+        is_fan = "fan" in blob
         if not (
             any(token in blob for token in _FACE_LABELS)
             or any(token in blob for token in ("lamp", "bulb", "light"))
         ):
             kept.append(det)
             continue
+        if is_fan and _box_on_hair_band(det.xyxy, face_oval):
+            continue
         if box_on_face(det.xyxy, face_oval):
-            # Globe matcher (~0.88): a shown bulb, including one held in front of the face.
+            # Held bulb in front of the face — not a YOLO flash on hair / forehead.
+            if is_fan:
+                continue
             if det.conf >= 0.82:
                 kept.append(det)
                 continue
@@ -104,13 +131,13 @@ def drop_boxes_on_face(
 
 
 def keep_lamp_detections(detections: list[DetectedObject]) -> list[DetectedObject]:
-    """Phase 1 only locks a lamp. Phones, fans, and bottles must not steal gaze."""
-    lamps: list[DetectedObject] = []
+    """Keep lamp and fan gaze targets; drop phone/bottle YOLO noise."""
+    kept: list[DetectedObject] = []
     for det in detections:
         blob = f"{det.label or ''} {det.appliance or ''}".lower()
-        if any(token in blob for token in ("lamp", "bulb", "light")):
-            lamps.append(det)
-    return lamps
+        if any(token in blob for token in ("lamp", "bulb", "light", "fan")):
+            kept.append(det)
+    return kept
 
 
 def drop_lamps_on_people(
@@ -141,8 +168,13 @@ def _point_hits(obj: DetectedObject, ax: float, ay: float) -> bool:
     x0, y0, x1, y1 = obj.xyxy
     bw = max(x1 - x0, 1)
     bh = max(y1 - y0, 1)
-    pad_x = min(0.08 * bw, 16)
-    pad_y = min(0.08 * bh, 16)
+    blob = f"{obj.label or ''} {obj.appliance or ''}".lower()
+    if "fan" in blob:
+        pad_x = min(0.18 * bw, 32)
+        pad_y = min(0.18 * bh, 32)
+    else:
+        pad_x = min(0.08 * bw, 16)
+        pad_y = min(0.08 * bh, 16)
     return (x0 - pad_x) <= ax <= (x1 + pad_x) and (y0 - pad_y) <= ay <= (y1 + pad_y)
 
 
@@ -186,8 +218,8 @@ def _select_along_ray(
 ) -> Target | None:
     """A glance toward an object counts, even if the short aim point stops on the face."""
     assert gaze.eye_xy is not None
-    # Iris wins when mirrored head pose points the other way. Same-side looks stay on the blend.
-    yaw, pitch = look_axes(gaze)
+    # Head + iris in the camera picture (mirrored frame already applied upstream).
+    yaw, pitch = _image_look(gaze)
     dx = yaw * frame_w
     dy = pitch * frame_h
     # Looking at the real object turns the eyes sideways. The preview sits on
@@ -247,12 +279,13 @@ def _select_by_angle(
 ) -> Target | None:
     """A steady glance toward an object counts, even if the point stops short of the box."""
     assert gaze.eye_xy is not None
-    yaw, pitch = look_axes(gaze)
+    yaw, pitch = _image_look(gaze)
     look_x = yaw * frame_w
     look_y = pitch * frame_h
     mag = (look_x * look_x + look_y * look_y) ** 0.5
     if mag < (0.035 if sticky_id else 0.055) * frame_w:
         return None
+    soft_glance = abs(yaw) < 0.20 and abs(pitch) < 0.20
     scored: list[tuple[float, DetectedObject]] = []
     for obj in detections:
         cx, cy = obj.center
@@ -269,7 +302,8 @@ def _select_by_angle(
         return None
     scored.sort(key=lambda item: item[0], reverse=True)
     best_align, best = scored[0]
-    if best_align < (0.72 if sticky_id else 0.82):
+    need = 0.72 if sticky_id else (0.88 if soft_glance else 0.80)
+    if best_align < need:
         return None
     rival_label = None
     ambiguous = False
@@ -473,10 +507,14 @@ def _sides_of_face(
     return sides
 
 
-def _look_side(yaw: float, pitch: float, *, sticky: bool = False) -> str | None:
+def _look_side(yaw: float, pitch: float, *, sticky: bool = False, world: bool = False) -> str | None:
     """Which way the eyes and head look. None if they are on the camera."""
-    dead_yaw = 0.10 if sticky else 0.14
-    dead_pitch = 0.12 if sticky else 0.16
+    if world:
+        dead_yaw = 0.12 if sticky else 0.20
+        dead_pitch = 0.14 if sticky else 0.22
+    else:
+        dead_yaw = 0.10 if sticky else 0.14
+        dead_pitch = 0.12 if sticky else 0.16
     if abs(yaw) < dead_yaw and abs(pitch) < dead_pitch:
         return None
     if abs(yaw) >= abs(pitch):
@@ -541,7 +579,8 @@ def select_by_world_look(
                         rival_label = second.appliance or second.label
                 return _as_target(best, 1.0 / (1.0 + max(best_d, 0.0)), ambiguous=ambiguous, rival_label=rival_label)
 
-    look = _look_side(*_image_look(gaze), sticky=bool(sticky_id))
+    yaw_i, pitch_i = _image_look(gaze)
+    look = _look_side(yaw_i, pitch_i, sticky=bool(sticky_id), world=True)
     if look is None:
         return None
     hits: list[DetectedObject] = []
@@ -560,6 +599,42 @@ def select_by_world_look(
         if any(_iou(obj.xyxy, other.xyxy) >= 0.12 for other in unique):
             continue
         unique.append(obj)
+    if gaze.eye_xy is not None and len(unique) >= 1:
+        look_x, look_y = yaw_i * frame_w, pitch_i * frame_h
+        mag = (look_x * look_x + look_y * look_y) ** 0.5
+        if mag >= 0.04 * frame_w:
+            scored: list[tuple[float, DetectedObject]] = []
+            for obj in unique:
+                cx, cy = obj.center
+                vx, vy = cx - gaze.eye_xy[0], cy - gaze.eye_xy[1]
+                dist = (vx * vx + vy * vy) ** 0.5
+                if dist < 0.06 * frame_w:
+                    continue
+                align = (look_x * vx + look_y * vy) / (mag * dist)
+                if sticky_id and obj.obj_id == sticky_id:
+                    align += 0.06
+                scored.append((align, obj))
+            if scored:
+                scored.sort(key=lambda item: item[0], reverse=True)
+                best_align, best = scored[0]
+                if best_align >= (0.76 if sticky_id else 0.84):
+                    rival_label = None
+                    ambiguous = False
+                    if len(scored) >= 2:
+                        second_align, second = scored[1]
+                        if second_align >= 0.84 and (best_align - second_align) < 0.08:
+                            ambiguous = True
+                            rival_label = second.appliance or second.label
+                    return _as_target(
+                        best,
+                        best_align,
+                        ambiguous=ambiguous,
+                        rival_label=rival_label,
+                    )
+            # One appliance on that side of the face — real object often sits below the ray.
+            if len(unique) == 1 and abs(yaw_i) >= 0.24:
+                return _as_target(unique[0], 0.82)
+        return None
     if len(unique) >= 2:
         rival = unique[1]
         return _as_target(
@@ -743,11 +818,16 @@ def select_target(
 
         pool = others if lamps and others else (others or detections)
         if pool and (not lamps or others):
-            world = select_by_world_look(
-                gaze, pool, frame_w, frame_h, sticky_id, look_templates
+            aim_useful = (
+                gaze.aim_xy is not None
+                and not _aim_still_on_face(gaze, frame_w)
             )
-            if world is not None:
-                return world
+            if aim_useful:
+                at_aim = _select_at_aim(
+                    gaze, pool, frame_w, frame_h, sticky_id, ambiguity_margin
+                )
+                if at_aim is not None:
+                    return at_aim
             if gaze.eye_xy is not None:
                 along = _select_along_ray(
                     gaze, pool, frame_w, frame_h, sticky_id, ambiguity_margin
@@ -757,7 +837,7 @@ def select_target(
                 angled = _select_by_angle(gaze, pool, frame_w, frame_h, sticky_id)
                 if angled is not None:
                     return angled
-            if gaze.aim_xy is not None:
+            if gaze.aim_xy is not None and not aim_useful:
                 at_aim = _select_at_aim(
                     gaze, pool, frame_w, frame_h, sticky_id, ambiguity_margin
                 )
@@ -809,6 +889,11 @@ def select_target(
                         ambiguous=ambiguous,
                         rival_label=rival_label,
                     )
+            world = select_by_world_look(
+                gaze, pool, frame_w, frame_h, sticky_id, look_templates
+            )
+            if world is not None:
+                return world
 
     if not allow_slots:
         return None

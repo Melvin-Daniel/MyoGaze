@@ -7,13 +7,16 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        navigateFallbackDenylist: [/^\/label/, /^\/api\/label/],
+      },
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'MyoGaze',
         short_name: 'MyoGaze',
         description: 'Look at the lamp for two seconds to toggle it.',
-        theme_color: '#F5F2EC',
-        background_color: '#F5F2EC',
+        theme_color: '#EEF2F1',
+        background_color: '#EEF2F1',
         display: 'standalone',
         orientation: 'portrait-primary',
         start_url: '/',

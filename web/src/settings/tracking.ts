@@ -13,6 +13,24 @@ export function lampDevice(engine: NeuroShiftEngine) {
   );
 }
 
+export function fanDevice(engine: NeuroShiftEngine) {
+  return (
+    engine.devices.find((device) => /fan/i.test(`${device.id} ${device.label}`)) ??
+    engine.devices.find((device) => device.id === "fan") ??
+    null
+  );
+}
+
+/** Lamp and fan manual overrides (excludes plug). */
+export function overrideDevices(engine: NeuroShiftEngine) {
+  const out = [];
+  const lamp = lampDevice(engine);
+  const fan = fanDevice(engine);
+  if (lamp) out.push(lamp);
+  if (fan) out.push(fan);
+  return out;
+}
+
 export function laptopState(engine: NeuroShiftEngine): LaptopState {
   return engine.connection;
 }

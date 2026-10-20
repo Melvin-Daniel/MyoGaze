@@ -13,6 +13,7 @@ import {
   cameraState,
   isCalibrationComplete,
   isCalibrationFailure,
+  fanDevice,
   lampDevice,
   laptopState,
   runDiagnostics,
@@ -21,6 +22,7 @@ import {
   type DiagnosticCheck,
 } from "../../settings/tracking";
 import { APP_NAME, APP_VERSION } from "../../settings/version";
+import { loadTheme, saveTheme, type ThemeChoice } from "../../theme";
 import type { NeuroShiftEngine } from "../../useNeuroShift";
 import {
   ConfirmModal,
@@ -35,7 +37,8 @@ import {
 export function DevicePanel({ engine, onOpenLive }: { engine: NeuroShiftEngine; onOpenLive: () => void }) {
   const laptop = laptopState(engine);
   const camera = cameraState(engine);
-  const device = lampDevice(engine);
+  const lamp = lampDevice(engine);
+  const fan = fanDevice(engine);
   const running = engine.sessionState === "running";
   const [serverInput, setServerInput] = useState(getServerBase());
   const [serverStatus, setServerStatus] = useState<{ ok: boolean; message: string } | null>(null);
@@ -74,14 +77,25 @@ export function DevicePanel({ engine, onOpenLive }: { engine: NeuroShiftEngine; 
         />
       </SettingsSection>
 
-      {device ? (
+      {lamp ? (
         <SettingsSection label="Lamp">
           <SettingsToggle
             label="Lamp"
-            hint={!engine.connection || engine.connection === "offline" ? "Hub offline" : device.is_on ? "On — tap to override" : "Off — tap to override"}
-            checked={device.is_on}
+            hint={!engine.connection || engine.connection === "offline" ? "Hub offline" : lamp.is_on ? "On — tap to override" : "Off — tap to override"}
+            checked={lamp.is_on}
             disabled={engine.connection !== "connected"}
-            onChange={() => void engine.toggleDevice(device.id)}
+            onChange={() => void engine.toggleDevice(lamp.id)}
+          />
+        </SettingsSection>
+      ) : null}
+      {fan ? (
+        <SettingsSection label="Fan">
+          <SettingsToggle
+            label="Fan"
+            hint={!engine.connection || engine.connection === "offline" ? "Hub offline" : fan.is_on ? "On — tap to override" : "Off — tap to override"}
+            checked={fan.is_on}
+            disabled={engine.connection !== "connected"}
+            onChange={() => void engine.toggleDevice(fan.id)}
           />
         </SettingsSection>
       ) : null}
@@ -574,10 +588,27 @@ export function AccessibilityPanel({ engine }: { engine: NeuroShiftEngine }) {
 }
 
 export function AppearancePanel() {
+  const [choice, setChoice] = useState<ThemeChoice>(loadTheme);
+  const options: { value: ThemeChoice; label: string }[] = [
+    { value: "system", label: "Match my phone" },
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+  ];
   return (
-    <p className="note">
-      Home, Live, Activity, and Settings stay on paper. Harbor is the active color. High contrast and text size live under Accessibility.
-    </p>
+    <>
+      <p className="note">Pick how MyoGaze looks. High contrast and text size live under Accessibility.</p>
+      <SettingsSection>
+        <SettingsSelect
+          label="Theme"
+          value={choice}
+          options={options}
+          onChange={(next) => {
+            setChoice(next);
+            saveTheme(next);
+          }}
+        />
+      </SettingsSection>
+    </>
   );
 }
 

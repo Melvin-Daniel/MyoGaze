@@ -7,9 +7,9 @@ import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Header, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .. import __version__
@@ -140,6 +140,10 @@ def create_app() -> FastAPI:
             }
         )
         return {"ok": True}
+
+    @app.get("/api/detector")
+    def get_detector_status() -> dict:
+        return runtime.detector_status()
 
     @app.get("/api/settings", response_model=SettingsOut)
     def get_settings() -> SettingsOut:
@@ -288,11 +292,21 @@ def create_app() -> FastAPI:
         page = Path(__file__).resolve().parent / "iphone.html"
         return FileResponse(page, media_type="text/html")
 
-    def _lamp_raw_dir() -> Path:
-        return Path(__file__).resolve().parents[3] / "datasets" / "lamp" / "raw"
+    _LABEL_DATASETS = frozenset({"lamp", "fan"})
 
-    def _safe_raw_image(name: str) -> Path | None:
-        raw = _lamp_raw_dir()
+    def _label_dataset(dataset: str) -> str:
+        key = (dataset or "lamp").strip().lower()
+        if key not in _LABEL_DATASETS:
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=400, detail=f"Unknown dataset: {dataset}")
+        return key
+
+    def _raw_dir(dataset: str = "lamp") -> Path:
+        return Path(__file__).resolve().parents[3] / "datasets" / _label_dataset(dataset) / "raw"
+
+    def _safe_raw_image(name: str, dataset: str = "lamp") -> Path | None:
+        raw = _raw_dir(dataset)
         path = (raw / Path(name).name).resolve()
         try:
             path.relative_to(raw.resolve())
@@ -331,14 +345,26 @@ def create_app() -> FastAPI:
         bh = (y1 - y0) / height
         return f"0 {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}\n"
 
-    @app.get("/label")
-    def label_lamp_page() -> FileResponse:
+    def _label_html_response() -> FileResponse:
         page = Path(__file__).resolve().parent / "label.html"
-        return FileResponse(page, media_type="text/html")
+        return FileResponse(
+            page,
+            media_type="text/html",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/label")
+    def label_page() -> FileResponse:
+        return _label_html_response()
+
+    @app.get("/label/fan")
+    def label_fan_page() -> RedirectResponse:
+        return RedirectResponse(url="/label?dataset=fan", status_code=302)
 
     @app.get("/api/label/list")
-    def label_list() -> dict:
-        raw = _lamp_raw_dir()
+    def label_list(dataset: str = Query("lamp")) -> dict:
+        ds = _label_dataset(dataset)
+        raw = _raw_dir(ds)
         raw.mkdir(parents=True, exist_ok=True)
         names = sorted(
             p.name
@@ -351,11 +377,12 @@ def create_app() -> FastAPI:
             if not txt.is_file() or not txt.read_text(encoding="utf-8").strip():
                 start = idx
                 break
-        return {"images": names, "start": start}
+        return {"dataset": ds, "images": names, "start": start}
 
     @app.get("/api/label/image/{name}")
-    def label_image(name: str) -> FileResponse:
-        path = _safe_raw_image(name)
+    def label_image(name: str, dataset: str = Query("lamp")) -> FileResponse:
+        ds = _label_dataset(dataset)
+        path = _safe_raw_image(name, ds)
         if path is None:
             from fastapi import HTTPException
 
@@ -364,8 +391,9 @@ def create_app() -> FastAPI:
         return FileResponse(path, media_type=media)
 
     @app.get("/api/label/box/{name}")
-    def label_box_get(name: str) -> dict:
-        path = _safe_raw_image(name)
+    def label_box_get(name: str, dataset: str = Query("lamp")) -> dict:
+        ds = _label_dataset(dataset)
+        path = _safe_raw_image(name, ds)
         if path is None:
             from fastapi import HTTPException
 
@@ -382,8 +410,9 @@ def create_app() -> FastAPI:
         return {"name": path.name, "width": w, "height": h, "box": box}
 
     @app.put("/api/label/box/{name}")
-    def label_box_put(name: str, body: dict) -> dict:
-        path = _safe_raw_image(name)
+    def label_box_put(name: str, body: dict, dataset: str = Query("lamp")) -> dict:
+        ds = _label_dataset(dataset)
+        path = _safe_raw_image(name, ds)
         if path is None:
             from fastapi import HTTPException
 

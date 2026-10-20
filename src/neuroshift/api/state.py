@@ -136,10 +136,14 @@ class AppRuntime:
             try:
                 detector = ObjectDetector(
                     model_name=self.cfg.yolo_model,
+                    fan_model_name=getattr(self.cfg, "yolo_fan_model", "") or "",
                     conf=self.cfg.yolo_conf,
                     every_n_frames=self.cfg.yolo_every_n_frames,
                     imgsz=self.cfg.yolo_imgsz,
                     iou_match=0.22,
+                )
+                detector.custom_min_conf = float(
+                    getattr(self.cfg, "yolo_custom_min_conf", 0.35)
                 )
                 detector.warmup(self.cfg.yolo_imgsz)
                 self._shared_detector = detector
@@ -164,26 +168,32 @@ class AppRuntime:
         if detector is None and self.cfg.live_use_yolo:
             detector = ObjectDetector(
                 model_name=self.cfg.yolo_model,
+                fan_model_name=getattr(self.cfg, "yolo_fan_model", "") or "",
                 conf=self.cfg.yolo_conf,
                 every_n_frames=self.cfg.yolo_every_n_frames,
                 imgsz=self.cfg.yolo_imgsz,
                 iou_match=0.22,
             )
+            detector.custom_min_conf = float(
+                getattr(self.cfg, "yolo_custom_min_conf", 0.35)
+            )
             self._shared_detector = detector
         if detector is None:
             return None
+        detector.conf = float(self.cfg.yolo_conf)
+        detector.custom_min_conf = float(getattr(self.cfg, "yolo_custom_min_conf", 0.35))
         detector.every_n_frames = (
             max(5, int(self.cfg.yolo_every_n_frames)) if remote else max(3, int(self.cfg.yolo_every_n_frames))
         )
         detector.imgsz = 416
-        detector.match_fans = False
+        detector.match_fans = bool(getattr(self.cfg, "live_detect_fans", True))
         detector.reset_tracking()
         return detector
 
     def probe_camera(self) -> dict[str, Any]:
         cam = Camera(self.cfg)
         try:
-            cam.open()
+            cam.open_with_retry()
             _ = cam.read()
             self.camera_ok = True
             self.camera_message = f"Camera {self.cfg.camera_index} ready"
@@ -285,6 +295,22 @@ class AppRuntime:
             ended_at=data.get("ended_at"),
             note=data.get("note"),
         )
+
+    def detector_status(self) -> dict[str, object]:
+        cfg = self.cfg
+        out: dict[str, object] = {
+            "config_lamp": cfg.yolo_model,
+            "config_fan": getattr(cfg, "yolo_fan_model", "") or "",
+            "yolo_conf": cfg.yolo_conf,
+            "yolo_custom_min_conf": getattr(cfg, "yolo_custom_min_conf", 0.35),
+            "live_detect_fans": bool(getattr(cfg, "live_detect_fans", True)),
+            "loaded": False,
+        }
+        det = self._shared_detector
+        if det is not None and det.available:
+            out["loaded"] = True
+            out.update(det.info())
+        return out
 
     def status(self, version: str) -> StatusOut:
         from ..cli import _lan_ips
@@ -782,10 +808,9 @@ class AppRuntime:
                 await asyncio.to_thread(self._warmup_done.wait, 90)
 
         try:
-            if remote:
-                await _wait_models()
-            else:
-                await asyncio.gather(_wait_models(), asyncio.to_thread(cam.open))
+            await _wait_models()
+            if not remote:
+                await asyncio.to_thread(cam.open_with_retry)
         except Exception as exc:  # noqa: BLE001
             if remote:
                 raise
@@ -1071,14 +1096,7 @@ class AppRuntime:
                     sticky_note = "Slots mode — look LEFT / STRAIGHT / RIGHT"
 
                 gaze_xy = None
-                look = result.candidate or result.selected
-                if look is not None and look.xyxy and w > 0 and h > 0:
-                    lx0, ly0, lx1, ly1 = look.xyxy
-                    gaze_xy = [
-                        round(max(0.0, min(1.0, ((lx0 + lx1) / 2.0) / w)), 4),
-                        round(max(0.0, min(1.0, ((ly0 + ly1) / 2.0) / h)), 4),
-                    ]
-                elif g.aim_xy is not None and w > 0 and h > 0:
+                if g.aim_xy is not None and w > 0 and h > 0:
                     gaze_xy = [
                         round(max(0.0, min(1.0, g.aim_xy[0] / w)), 4),
                         round(max(0.0, min(1.0, g.aim_xy[1] / h)), 4),

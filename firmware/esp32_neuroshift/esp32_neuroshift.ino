@@ -6,9 +6,10 @@
  *   neuroshift/status   boot / ACK / wifi
  *
  * Wiring (optocoupled 5V relay module, often active-LOW):
- *   GPIO 17 / TX2 -> IN1 / K1 Lamp
- *   GPIO 16 / RX2 unused
- *   GPIO 18       -> IN3 Plug
+ *   GPIO 17 / TX2 -> IN1 / M1 (K1) Lamp (230V or load on COM/NO)
+ *   GPIO 16 / RX2 -> IN2 / M2 (K2) Fan (12V + on COM/NO, fan GND direct)
+ *   GPIO 18       -> IN3 / M3 (K3) Plug (optional — leave unwired if unused)
+ *   ESP32 GND -> relay GND; ESP32 5V -> relay VCC
  *
  * Libraries: PubSubClient, ArduinoJson
  * Board: ESP32 Dev Module
@@ -118,6 +119,8 @@ void handleSerialLine(String line) {
   line.toLowerCase();
   if (line == "on" || line == "lamp on") applyCommand("lamp", "ON");
   if (line == "off" || line == "lamp off") applyCommand("lamp", "OFF");
+  if (line == "fan on") applyCommand("fan", "ON");
+  if (line == "fan off") applyCommand("fan", "OFF");
 }
 
 void pollSerial() {
@@ -173,6 +176,7 @@ void setup() {
   writeRelay(PIN_LAMP, false);
   writeRelay(PIN_FAN, false);
   writeRelay(PIN_PLUG, false);
+  Serial.println("[hub] map: lamp=GPIO17/TX2/M1  fan=GPIO16/RX2/M2  plug=GPIO18/M3(optional)");
   Serial.println("[hub] usb ready");
 
 #if !HUB_USB_ONLY

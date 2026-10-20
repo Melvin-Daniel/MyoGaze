@@ -13,16 +13,15 @@ interface LiveViewProps {
   onPaused: (paused: boolean) => void;
 }
 
-function lampTargets(targets: NeuroShiftEngine["liveTargets"]) {
-  const lamps = targets.filter((item) => /lamp|bulb|light/i.test(`${item.id} ${item.label}`));
-  return lamps.length ? lamps : [];
+function applianceTargets(targets: NeuroShiftEngine["liveTargets"]) {
+  return targets.filter((item) => /lamp|bulb|light|fan/i.test(`${item.id} ${item.label}`));
 }
 
 export function LiveView({ engine, personName, onBack, onOpenSettings, onPaused }: LiveViewProps) {
   const { prefs } = usePrefs();
   const running = engine.sessionState === "running";
   const online = engine.connection === "connected";
-  const liveTargets = lampTargets(engine.liveTargets);
+  const liveTargets = applianceTargets(engine.liveTargets);
   const status = deriveGazeStatus({
     running,
     decision: engine.decision,
@@ -32,7 +31,7 @@ export function LiveView({ engine, personName, onBack, onOpenSettings, onPaused 
     dwellActuates: engine.settings.dwell_actuates !== false,
   });
   const recent = engine.activity.map((entry) => describeActivity(entry, personName)).slice(0, 2);
-  const target = status.targetLabel ? status.targetLabel.toLowerCase() : "lamp";
+  const target = status.targetLabel ? status.targetLabel.toLowerCase() : "device";
   const looking =
     running &&
     (status.phase === "looking" || status.phase === "locked" || status.phase === "confirmed") &&
@@ -48,17 +47,17 @@ export function LiveView({ engine, personName, onBack, onOpenSettings, onPaused 
         : status.phase === "unsure"
           ? "Wasn't sure — nothing switched"
           : liveTargets.length
-            ? "Lamp in view"
-            : "Find the lamp in the camera";
+            ? "Lamp or fan in view"
+            : "Point the camera at the lamp or fan";
   const lineDetail = !running
     ? "Resume to keep watching"
     : isWizard
-      ? "Look at the lamp in the room, not this screen"
+      ? "Look at the lamp or fan in the room, not this screen"
       : looking
         ? status.detail
         : status.phase === "unsure"
-          ? "Look at the lamp only"
-          : "Hold your gaze on the lamp for two seconds to toggle it. Look away before the next toggle.";
+          ? "Look at one device only"
+          : "Hold your gaze on the lamp or fan for two seconds to toggle it. Look away before the next toggle.";
   const pill = running ? "tracking" : online ? "paused" : "offline";
   const pillLabel = running ? "Looking" : online ? "Paused" : "Offline";
 
@@ -91,7 +90,7 @@ export function LiveView({ engine, personName, onBack, onOpenSettings, onPaused 
         ) : (
           <div className="video-empty">
             <p>{running ? "Starting camera…" : "Camera is off"}</p>
-            <span>The laptop webcam watches the lamp. This phone is the control screen.</span>
+            <span>The laptop webcam watches the lamp and fan. This phone is the control screen.</span>
           </div>
         )}
       </div>
@@ -114,7 +113,7 @@ export function LiveView({ engine, personName, onBack, onOpenSettings, onPaused 
         {recent.length === 0 ? (
           <div className="empty-card">
             <strong>Waiting for a look</strong>
-            <span>A two-second hold on the lamp will show up here.</span>
+            <span>A two-second hold on the lamp or fan will show up here.</span>
           </div>
         ) : (
           recent.map((item) => <ActivityRow key={item.id} item={item} time={formatMinutesAgo(item.timestamp)} />)

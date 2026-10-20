@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { AccountUser } from "../../auth";
 import { describeActivity, formatMinutesAgo } from "../../activityLog";
-import { LampIcon } from "../../icons";
+import { FanIcon, LampIcon } from "../../icons";
+import { fanDevice, lampDevice } from "../../settings/tracking";
 import type { NeuroShiftEngine } from "../../useNeuroShift";
 import { ActivityRow, IconChevron, IconGear, IconWarn } from "../RdIcons";
 
@@ -58,10 +59,11 @@ export function HomeView({
   const toggles = today.filter((item) => item.kind === "action").length;
   const unsure = today.filter((item) => item.kind === "review").length;
   const recent = items.slice(0, 3);
-  const lamp = engine.devices.find((device) => device.id === "lamp") ?? engine.devices[0];
+  const lamp = lampDevice(engine);
+  const fan = fanDevice(engine);
   const status = running ? "Live" : online ? "Ready" : "Offline";
   const heroSub = running
-    ? "Looking at the lamp for two seconds toggles it"
+    ? "Look at the lamp or fan for two seconds to toggle"
     : online
       ? "Laptop is connected. Start a session to look."
       : "Waiting for the laptop. Open Live once it is online.";
@@ -93,26 +95,28 @@ export function HomeView({
         <span className="hero-cta">{running ? "Open live view" : "Start looking"}</span>
       </button>
 
-      {lamp ? (
-        <div className="appliance">
-          <div className="appliance-icon" data-on={lamp.is_on}>
-            <LampIcon size={22} />
+      {[lamp, fan].map((device) =>
+        device ? (
+          <div className="appliance" key={device.id}>
+            <div className="appliance-icon" data-on={device.is_on}>
+              {device.id === "fan" ? <FanIcon size={22} /> : <LampIcon size={22} />}
+            </div>
+            <div className="appliance-copy">
+              <strong>{device.id === "fan" ? "Fan" : "Lamp"}</strong>
+              <span>{online ? (device.is_on ? "On" : "Off") : "Hub offline"}</span>
+            </div>
+            <button
+              type="button"
+              className="switch"
+              role="switch"
+              aria-checked={device.is_on}
+              aria-label={`Turn ${device.id} ${device.is_on ? "off" : "on"}`}
+              disabled={!online}
+              onClick={() => engine.toggleDevice(device.id)}
+            />
           </div>
-          <div className="appliance-copy">
-            <strong>Lamp</strong>
-            <span>{online ? (lamp.is_on ? "On" : "Off") : "Hub offline"}</span>
-          </div>
-          <button
-            type="button"
-            className="switch"
-            role="switch"
-            aria-checked={lamp.is_on}
-            aria-label={`Turn lamp ${lamp.is_on ? "off" : "on"}`}
-            disabled={!online}
-            onClick={() => engine.toggleDevice(lamp.id)}
-          />
-        </div>
-      ) : null}
+        ) : null,
+      )}
 
       {reviewCount > 0 ? (
         <button type="button" className="attn" onClick={onOpenReview}>

@@ -364,8 +364,14 @@ class TestCuedTrialRuntime(unittest.TestCase):
 class TestConfig(unittest.TestCase):
     def test_load_yaml(self):
         cfg = load_config(ROOT / "config" / "default.yaml")
-        self.assertEqual(cfg.product_name, "NeuroShift")
+        self.assertEqual(cfg.product_name, "MyoGaze")
         self.assertGreater(cfg.dwell_seconds, 0)
+        self.assertIn("lamp", cfg.yolo_model)
+        self.assertIn("fan", getattr(cfg, "yolo_fan_model", ""))
+        lamp_pt = ROOT / cfg.yolo_model
+        fan_pt = ROOT / cfg.yolo_fan_model
+        self.assertTrue(lamp_pt.is_file(), f"missing {lamp_pt}")
+        self.assertTrue(fan_pt.is_file(), f"missing {fan_pt}")
         cfg2 = apply_overrides(cfg, {"emg_mode": "mouse"})
         self.assertEqual(cfg2.emg_mode, "mouse")
 
@@ -506,6 +512,33 @@ class TestSelectorAmbiguity(unittest.TestCase):
         assert found is not None
         self.assertEqual(found.label, "Fan")
 
+    def test_straight_look_does_not_lock_side_fan_with_lamp(self):
+        from src.neuroshift.detector import DetectedObject
+        from src.neuroshift.selector import select_target
+        from src.neuroshift.types import GazeEstimate
+
+        fan_tl = DetectedObject("fan_1", "fan", 0.86, (40, 40, 180, 180), "Fan")
+        lamp_br = DetectedObject("lamp_1", "lamp", 0.88, (420, 280, 560, 430), "Lamp")
+        straight = GazeEstimate(True, (320, 240), 0.02, 0.02, 0.9, aim_xy=(322, 245))
+        self.assertIsNone(
+            select_target(
+                straight,
+                [fan_tl, lamp_br],
+                640,
+                480,
+                0.2,
+                prefer_detections=True,
+                allow_slots=False,
+            )
+        )
+        at_lamp = GazeEstimate(True, (320, 240), 0.35, 0.28, 0.9, aim_xy=(490, 355))
+        locked = select_target(
+            at_lamp, [fan_tl, lamp_br], 640, 480, 0.2, prefer_detections=True, allow_slots=False
+        )
+        self.assertIsNotNone(locked)
+        assert locked is not None
+        self.assertEqual(locked.label, "Lamp")
+
     def test_looking_at_the_camera_does_not_lock_a_mirror_lamp(self):
         from src.neuroshift.detector import DetectedObject
         from src.neuroshift.selector import box_on_face, drop_boxes_on_face, select_target
@@ -563,9 +596,10 @@ class TestSelectorAmbiguity(unittest.TestCase):
         self.assertFalse(box_on_body(side_lamp, oval))
         dropped = drop_boxes_on_face([on_chest, beside], oval)
         self.assertEqual([item.obj_id for item in dropped], ["lamp_side"])
+        fan = DetectedObject("fan_1", "fan", 0.86, (420, 200, 560, 340), "Fan")
         self.assertEqual(
-            [item.obj_id for item in keep_lamp_detections([beside, phone])],
-            ["lamp_side"],
+            [item.obj_id for item in keep_lamp_detections([beside, phone, fan])],
+            ["lamp_side", "fan_1"],
         )
 
         looking_down = GazeEstimate(
@@ -718,12 +752,16 @@ class TestSelectorAmbiguity(unittest.TestCase):
         eyes = (280.0, 180.0)
         aim = aim_from_eyes(eyes, 0.55, 0.05, 640, 480)
         self.assertGreater(aim[0], eyes[0] + 40)
+        from src.neuroshift.selector import _box_on_hair_band
+
         face = DetectedObject("fan_face", "fan", 0.8, (190, 70, 370, 290), "Fan")
+        hair = DetectedObject("fan_hair", "fan", 0.86, (220, 40, 360, 175), "Fan")
         fan = DetectedObject("fan_1", "fan", 0.9, (430, 150, 560, 290), "Fan")
         oval = (280.0, 180.0, 100.0, 120.0)
         self.assertTrue(box_on_face(face.xyxy, oval))
+        self.assertTrue(_box_on_hair_band(hair.xyxy, oval))
         self.assertFalse(box_on_face(fan.xyxy, oval))
-        kept = drop_boxes_on_face([face, fan], oval)
+        kept = drop_boxes_on_face([face, hair, fan], oval)
         self.assertEqual([item.obj_id for item in kept], ["fan_1"])
 
         looking = GazeEstimate(True, eyes, 0.55, 0.05, 0.9, aim_xy=aim)

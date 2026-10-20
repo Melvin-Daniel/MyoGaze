@@ -113,14 +113,21 @@ def _is_open_vocab(model_name: str) -> bool:
     return "yoloe" in stem or "world" in stem
 
 
-def _model_is_custom_lamp(model: object) -> bool:
-    """True for a one-class lamp detector (Stage B fine-tune), not YOLOE prompts."""
+def _model_class_keys(model: object) -> set[str]:
     names = getattr(model, "names", None)
     if not names:
-        return False
+        return set()
     values = names.values() if isinstance(names, dict) else names
-    keys = {canonicalize_label(str(v)) for v in values}
-    return keys == {"lamp"}
+    return {canonicalize_label(str(v)) for v in values}
+
+
+def _model_is_custom_lamp(model: object) -> bool:
+    """True for a one-class lamp detector (Stage B fine-tune), not YOLOE prompts."""
+    return _model_class_keys(model) == {"lamp"}
+
+
+def _model_is_custom_fan(model: object) -> bool:
+    return _model_class_keys(model) == {"fan"}
 
 
 def _fan_on_person(
@@ -383,7 +390,11 @@ def _prepare_template(gray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return tmpl, cv2.Canny(tmpl, 40, 120)
 
 
-def _has_radial_blades(gray: np.ndarray, peak_min: float = 6.0) -> bool:
+def _has_radial_blades(
+    gray: np.ndarray,
+    peak_min: float = 6.0,
+    peak_max: int = 18,
+) -> bool:
     """True when a ring around the hub has several intensity peaks (fan blades)."""
     import cv2
 
@@ -413,7 +424,7 @@ def _has_radial_blades(gray: np.ndarray, peak_min: float = 6.0) -> bool:
     for i in range(n):
         if ring[i] > ring[i - 1] and ring[i] >= ring[(i + 1) % n] and ring[i] > peak_min:
             peaks += 1
-    return 4 <= peaks <= 18
+    return 4 <= peaks <= peak_max
 
 
 def _has_bright_hub(gray: np.ndarray) -> bool:
@@ -606,11 +617,89 @@ def looks_like_pc_fan(frame_bgr: np.ndarray, xyxy: tuple[int, int, int, int]) ->
     bright_hub = _has_bright_hub(gray)
     if float(gray.mean()) > 145 and not bright_hub:
         return False
+    mean = float(gray.mean())
+    peak_min = 5.5 if mean < 95 else 6.0
+    peak_max = 22 if mean < 95 else 18
     if bright_hub:
-        return _has_radial_blades(gray, peak_min=6.0)
-    if float(gray.mean()) > 140:
+        return _has_radial_blades(gray, peak_min=peak_min, peak_max=peak_max)
+    if mean > 140:
         return False
-    return _has_radial_blades(gray)
+    return _has_radial_blades(gray, peak_min=peak_min, peak_max=peak_max)
+
+
+def _custom_fan_trust_conf(custom_min: float) -> float:
+    """Above this, trust the fine-tuned fan YOLO like the lamp model."""
+    return max(0.52, float(custom_min) + 0.10)
+
+
+def _soft_fan_shape_ok(frame_bgr: np.ndarray, xyxy: tuple[int, int, int, int]) -> bool:
+    """Block hair / globes / bright blobs without requiring blade peaks every frame."""
+    import cv2
+
+    h, w = frame_bgr.shape[:2]
+    x0, y0, x1, y1 = xyxy
+    x0, y0 = max(0, int(x0)), max(0, int(y0))
+    x1, y1 = min(w, int(x1)), min(h, int(y1))
+    bw, bh = x1 - x0, y1 - y0
+    if bw < 22 or bh < 22:
+        return False
+    aspect = bw / max(bh, 1)
+    if not 0.68 <= aspect <= 1.42:
+        return False
+    crop = frame_bgr[y0:y1, x0:x1]
+    if crop.size == 0 or _mostly_skin(crop):
+        return False
+    if _globe_in_or_above(frame_bgr, (x0, y0, x1, y1)):
+        return False
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    if float(gray.mean()) > 158 and not _has_bright_hub(gray):
+        return False
+    if float(gray.std()) < 12 and float(gray.mean()) > 130:
+        return False
+    return True
+
+
+def _fan_shape_accepted(
+    frame_bgr: np.ndarray,
+    xyxy: tuple[int, int, int, int],
+    conf: float,
+    custom_min: float,
+    *,
+    crop: bool = True,
+) -> tuple[bool, tuple[int, int, int, int]]:
+    """Tighten loose YOLO boxes; accept high-conf custom hits without blade gate."""
+    box = (_fan_crop(frame_bgr, xyxy) if crop else None) or xyxy
+    if looks_like_pc_fan(frame_bgr, box):
+        return True, box
+    if conf >= _custom_fan_trust_conf(custom_min) and _soft_fan_shape_ok(frame_bgr, box):
+        return True, box
+    return False, box
+
+
+def _accept_custom_fan_yolo(
+    frame_bgr: np.ndarray,
+    xyxy: tuple[int, int, int, int],
+    conf: float,
+    custom_min: float,
+) -> tuple[bool, tuple[int, int, int, int]]:
+    """Trust one-class fan weights like the lamp model — lamp in frame must not zero fan."""
+    box = _fan_crop(frame_bgr, xyxy) or xyxy
+    h, w = frame_bgr.shape[:2]
+    x0, y0, x1, y1 = box
+    x0, y0 = max(0, int(x0)), max(0, int(y0))
+    x1, y1 = min(w, int(x1)), min(h, int(y1))
+    bw, bh = x1 - x0, y1 - y0
+    if bw < 18 or bh < 18:
+        return False, box
+    area = (bw * bh) / max(w * h, 1)
+    if area < 0.0015 or area > 0.55:
+        return False, box
+    crop = frame_bgr[y0:y1, x0:x1]
+    if crop.size == 0 or _mostly_skin(crop):
+        return False, box
+    if conf < float(custom_min):
+        return False, box
+    return True, (x0, y0, x1, y1)
 
 
 def match_pc_fan_template(
@@ -881,6 +970,15 @@ def _collapse_same_object(
             if not looks_like_led_bulb(frame_bgr, union) and globe_ref is not None:
                 kept = ("lamp", max(best_conf, 0.8), globe_ref)
         elif bulb_box is not None and fan_box is not None:
+            lamps_in = [item for item in group if item[0] == "lamp"]
+            fans_in = [item for item in group if item[0] == "fan"]
+            split_lamp = max(lamps_in, key=lambda item: item[1])[2] if lamps_in else bulb_box
+            split_fan = max(fans_in, key=lambda item: item[1])[2] if fans_in else fan_box
+            # Lit lamp + fan in separate hands: keep both (ON globe used to drop fan).
+            if _iou(split_lamp, split_fan) < 0.12:
+                out.append(("lamp", max(best_conf, 0.8), split_lamp))
+                out.append(("fan", max(best_conf, 0.8), split_fan))
+                continue
             if looks_like_pc_fan(frame_bgr, fan_box) and not looks_like_led_bulb(frame_bgr, union):
                 kept = ("fan", max(best_conf, 0.8), fan_box)
             else:
@@ -894,7 +992,10 @@ def _collapse_same_object(
         if kept[0] == "cup":
             continue
         if kept[0] == "lamp" and not looks_like_led_bulb(frame_bgr, kept[2]):
-            if not (stacked_cap and globe_ref is not None):
+            trust_yolo = kept[1] >= 0.34 and (
+                _lit_globe_on(frame_bgr, kept[2]) or _globe_in_or_above(frame_bgr, kept[2])
+            )
+            if not trust_yolo and not (stacked_cap and globe_ref is not None):
                 others = [item for item in group if item[0] != "lamp"]
                 if not others:
                     continue
@@ -1181,6 +1282,101 @@ def _white_globe_candidates(frame_bgr: np.ndarray) -> list[tuple[int, int, int, 
     return out
 
 
+def _bright_globe_candidates(frame_bgr: np.ndarray) -> list[tuple[int, int, int, int]]:
+    """ON bulb: saturation clip breaks HSV white mask — use luminance blobs."""
+    import cv2
+
+    h, w = frame_bgr.shape[:2]
+    scale = min(1.0, 480 / max(w, 1))
+    small = (
+        cv2.resize(frame_bgr, (max(80, int(w * scale)), max(60, int(h * scale))))
+        if scale < 1
+        else frame_bgr
+    )
+    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+    inv = 1.0 / scale
+    sh, sw = small.shape[:2]
+    span = min(sw, sh)
+    out: list[tuple[int, int, int, int]] = []
+    p90 = float(np.percentile(gray, 90))
+    thresholds = {
+        int(max(168, p90 - 14)),
+        int(max(172, p90 - 8)),
+        int(max(176, p90 - 2)),
+        int(max(180, p90 + 2)),
+    }
+    for thr in thresholds:
+        mask = (gray >= thr).astype(np.uint8) * 255
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for contour in contours:
+            area = float(cv2.contourArea(contour))
+            if area < 180:
+                continue
+            (_cx, _cy), radius = cv2.minEnclosingCircle(contour)
+            if radius < 10:
+                continue
+            circ = area / max(np.pi * radius * radius, 1.0)
+            if circ < 0.20:
+                continue
+            if radius > span * 0.78:
+                continue
+            mask_i = np.zeros((sh, sw), np.uint8)
+            cv2.drawContours(mask_i, [contour], -1, 255, -1)
+            interior = gray[mask_i > 0]
+            if interior.size < 16 or float(interior.mean()) < 178:
+                continue
+            pad = radius * 1.12
+            x0 = int(max(0, (_cx - pad) * inv))
+            y0 = int(max(0, (_cy - pad) * inv))
+            x1 = int(min(w, (_cx + pad) * inv))
+            y1 = int(min(h, (_cy + pad * 1.35) * inv))
+            if x1 - x0 >= 22 and y1 - y0 >= 26:
+                box = (x0, y0, x1, y1)
+                if not any(_iou(box, other) >= 0.40 for other in out):
+                    out.append(box)
+    if scale < 1.0:
+        gray_f = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
+        thr_f = max(175, int(float(np.percentile(gray_f, 88))))
+        mask_f = (gray_f >= thr_f).astype(np.uint8) * 255
+        mask_f = cv2.morphologyEx(mask_f, cv2.MORPH_CLOSE, np.ones((11, 11), np.uint8))
+        contours_f, _ = cv2.findContours(mask_f, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        span_f = min(h, w)
+        for contour in contours_f:
+            area = float(cv2.contourArea(contour))
+            if area < 320:
+                continue
+            (_cx, _cy), radius = cv2.minEnclosingCircle(contour)
+            if radius < 14 or radius > span_f * 0.55:
+                continue
+            circ = area / max(np.pi * radius * radius, 1.0)
+            if circ < 0.18:
+                continue
+            pad = radius * 1.10
+            x0 = int(max(0, _cx - pad))
+            y0 = int(max(0, _cy - pad))
+            x1 = int(min(w, _cx + pad))
+            y1 = int(min(h, _cy + pad * 1.32))
+            if x1 - x0 >= 24 and y1 - y0 >= 28:
+                box = (x0, y0, x1, y1)
+                if not any(_iou(box, other) >= 0.40 for other in out):
+                    out.append(box)
+    return out
+
+
+def _globe_lamp_candidates(frame_bgr: np.ndarray) -> list[tuple[int, int, int, int]]:
+    white = _white_globe_candidates(frame_bgr)
+    out = list(white)
+    for box in _bright_globe_candidates(frame_bgr):
+        if not _lit_globe_on(frame_bgr, box):
+            continue
+        if any(_iou(box, other) >= 0.45 for other in out):
+            continue
+        out.append(box)
+    return out
+
+
 def _crop_led_bulb(bgr: np.ndarray) -> np.ndarray | None:
     """Crop the porcelain globe. Never return the whole photo — that locks the pose."""
     boxes = _white_globe_candidates(bgr)
@@ -1308,11 +1504,49 @@ def _busy_print(crop: np.ndarray) -> bool:
     return True
 
 
+def _lit_globe_on(
+    frame_bgr: np.ndarray, xyxy: tuple[int, int, int, int]
+) -> bool:
+    """ON bulb: blown-out white core — contour globe test often fails."""
+    import cv2
+
+    h, w = frame_bgr.shape[:2]
+    if not _near_held_lamp(xyxy, w, h):
+        return False
+    x0, y0, x1, y1 = xyxy
+    x0, y0 = max(0, int(x0)), max(0, int(y0))
+    x1, y1 = min(w, int(x1)), min(h, int(y1))
+    bw, bh = x1 - x0, y1 - y0
+    if bw < 20 or bh < 22:
+        return False
+    aspect = bw / max(bh, 1)
+    if not 0.32 <= aspect <= 1.45:
+        return False
+    crop = frame_bgr[y0:y1, x0:x1]
+    if crop.size == 0 or _mostly_skin(crop):
+        return False
+    gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+    mean = float(gray.mean())
+    std = float(gray.std())
+    if mean < 165:
+        return False
+    if std < 10 and mean < 198:
+        return False
+    hot = (gray >= min(200, mean - 8)).mean()
+    if hot < 0.28 and mean < 185:
+        return False
+    if mean >= 185 or hot >= 0.42:
+        return True
+    return hot >= 0.34 and mean >= 172
+
+
 def _solid_white_globe(frame_bgr: np.ndarray, xyxy: tuple[int, int, int, int]) -> bool:
     """True for a closed white LED globe in this box. No fan check (avoids cycles)."""
     import cv2
 
     h, w = frame_bgr.shape[:2]
+    if _lit_globe_on(frame_bgr, xyxy):
+        return True
     x0, y0, x1, y1 = xyxy
     x0, y0 = max(0, int(x0)), max(0, int(y0))
     x1, y1 = min(w, int(x1)), min(h, int(y1))
@@ -1538,12 +1772,13 @@ def find_led_bulbs(
     _remember_frame(frame_bgr)
     h, w = frame_bgr.shape[:2]
     hits: list[tuple[float, float, tuple[int, int, int, int]]] = []
-    for xyxy in _white_globe_candidates(frame_bgr):
-        if not looks_like_led_bulb(frame_bgr, xyxy):
+    for xyxy in _globe_lamp_candidates(frame_bgr):
+        if not (looks_like_led_bulb(frame_bgr, xyxy) or _lit_globe_on(frame_bgr, xyxy)):
             continue
+        lit = _lit_globe_on(frame_bgr, xyxy)
         if not _near_held_lamp(xyxy, w, h):
             continue
-        if _distant_glow(xyxy, w, h):
+        if not lit and _distant_glow(xyxy, w, h):
             continue
         if _clothing_or_face_lamp(xyxy, people, w, h):
             continue
@@ -1555,7 +1790,8 @@ def find_led_bulbs(
         hits.sort(reverse=True)
         unique: list[tuple[float, float, tuple[int, int, int, int]]] = []
         for item in hits:
-            if item[0] < -12.0:
+            floor = -18.0 if _lit_globe_on(frame_bgr, item[2]) else -12.0
+            if item[0] < floor:
                 continue
             if any(_iou(item[2], other[2]) >= 0.35 for other in unique):
                 continue
@@ -1563,10 +1799,16 @@ def find_led_bulbs(
         # Closest / largest first. Shirt flowers are many similar mid discs.
         if not unique:
             pass
-        elif len(unique) >= 3 and unique[0][1] < 1.8 * unique[1][1] and unique[0][1] < 0.06:
+        elif (
+            len(unique) >= 3
+            and unique[0][1] < 1.8 * unique[1][1]
+            and unique[0][1] < 0.06
+            and not _lit_globe_on(frame_bgr, unique[0][2])
+        ):
             return []
         else:
-            return [(unique[0][2], 0.88)]
+            conf = 0.91 if _lit_globe_on(frame_bgr, unique[0][2]) else 0.88
+            return [(unique[0][2], conf)]
     hit = match_led_bulb_template(frame_bgr)
     if hit is not None:
         xyxy, score = hit
@@ -1587,6 +1829,7 @@ class ObjectDetector:
     def __init__(
         self,
         model_name: str = "yoloe-26s-seg.pt",
+        fan_model_name: str = "",
         conf: float = 0.12,
         target_classes: set[str] | None = None,
         every_n_frames: int = 3,
@@ -1599,12 +1842,21 @@ class ObjectDetector:
         self.iou_match = iou_match
         self.imgsz = imgsz
         self.model_name = model_name
+        self.fan_model_name = (fan_model_name or "").strip()
+        self.lamp_weights_resolved: str | None = None
+        self.fan_weights_resolved: str | None = None
+        self.custom_min_conf = 0.35
         self._frame_i = 0
         self._last: list[DetectedObject] = []
         self._next_id = 1
         self.last_people: list[tuple[int, int, int, int]] = []
         self._people_misses = 0
         self._pending_lamps: list[tuple[tuple[int, int, int, int], float]] = []
+        self._pending_fans: list[tuple[tuple[int, int, int, int], float]] = []
+        self._fan_misses = 0
+        self._lamp_misses = 0
+        self._lit_lamp_xyxy: tuple[int, int, int, int] | None = None
+        self._lit_lamp_miss = 0
         self.match_fans = True
         self.min_area_frac = 0.003
         self.max_area_frac = 0.45
@@ -1612,18 +1864,39 @@ class ObjectDetector:
         self.max_objects = 6
         self.available = False
         self.model = None
+        self.fan_model = None
         self._custom_lamp = False
+        self._custom_fan = False
         try:
             from ultralytics import YOLO
 
-            print(f"[detector] loading {model_name} …", flush=True)
-            self.model = YOLO(model_name)
+            root = Path(__file__).resolve().parents[2]
+            lamp_resolved = Path(model_name)
+            if not lamp_resolved.is_file():
+                lamp_resolved = root / model_name
+            if lamp_resolved.is_file():
+                self.lamp_weights_resolved = str(lamp_resolved.resolve())
+            print(f"[detector] loading {self.lamp_weights_resolved or model_name} …", flush=True)
+            self.model = YOLO(str(lamp_resolved if lamp_resolved.is_file() else model_name))
             if _is_open_vocab(model_name) and hasattr(self.model, "set_classes"):
                 self.model.set_classes(list(PROMPT_CLASSES))
                 print(f"[detector] prompts: {', '.join(PROMPT_CLASSES)}", flush=True)
             self._custom_lamp = _model_is_custom_lamp(self.model)
             if self._custom_lamp:
                 print("[detector] custom lamp weights — skipping YOLOE prompts", flush=True)
+            if self.fan_model_name:
+                fan_resolved = Path(self.fan_model_name)
+                if not fan_resolved.is_file():
+                    fan_resolved = root / self.fan_model_name
+                if fan_resolved.is_file():
+                    self.fan_weights_resolved = str(fan_resolved.resolve())
+                    print(f"[detector] loading fan {self.fan_weights_resolved} …", flush=True)
+                    self.fan_model = YOLO(self.fan_weights_resolved)
+                    self._custom_fan = _model_is_custom_fan(self.fan_model)
+                    if self._custom_fan:
+                        print("[detector] custom fan weights loaded", flush=True)
+                else:
+                    print(f"[detector] fan weights missing ({self.fan_model_name})", flush=True)
             self.available = True
         except Exception as exc:  # noqa: BLE001
             print(f"[detector] YOLO unavailable ({exc}). Using virtual slots only.", flush=True)
@@ -1635,6 +1908,7 @@ class ObjectDetector:
         self.last_people = []
         self._people_misses = 0
         self._pending_lamps = []
+        self._pending_fans = []
 
     def warmup(self, imgsz: int | None = None) -> None:
         """Run one dummy predict so the first live frame is not a cold start."""
@@ -1645,21 +1919,39 @@ class ObjectDetector:
         size = int(imgsz or self.imgsz)
         dummy = np.zeros((size, size, 3), np.uint8)
         self.model.predict(dummy, conf=self.conf, imgsz=size, verbose=False, max_det=1)
+        fan_model = getattr(self, "fan_model", None)
+        if fan_model is not None:
+            fan_model.predict(dummy, conf=self.conf, imgsz=size, verbose=False, max_det=1)
         self.reset_tracking()
+
+    def info(self) -> dict[str, object]:
+        return {
+            "lamp_weights": self.lamp_weights_resolved or self.model_name,
+            "fan_weights": self.fan_weights_resolved or self.fan_model_name or None,
+            "custom_lamp": bool(self._custom_lamp),
+            "custom_fan": bool(self._custom_fan),
+            "fan_loaded": self.fan_model is not None,
+            "heuristic_lamp": not self._custom_lamp,
+            "heuristic_fan": getattr(self, "match_fans", True) and not self._custom_fan,
+            "yolo_conf": self.conf,
+            "custom_min_conf": self.custom_min_conf,
+        }
 
     def detect(self, frame_bgr: np.ndarray) -> list[DetectedObject]:
         self._frame_i += 1
         if (self._frame_i - 1) % self.every_n_frames != 0:
-            return self._last
+            return self._refresh_lamp_between_yolo(frame_bgr)
         _remember_frame(frame_bgr)
 
         raw: list[tuple[str, float, tuple[int, int, int, int]]] = []
         people: list[tuple[int, int, int, int]] = []
         if self.available and self.model is not None:
+            lamp_conf = min(self.conf, 0.18) if getattr(self, "_custom_lamp", False) else self.conf
+            lamp_imgsz = max(int(self.imgsz), 480) if getattr(self, "_custom_lamp", False) else self.imgsz
             results = self.model.predict(
                 frame_bgr,
-                conf=self.conf,
-                imgsz=self.imgsz,
+                conf=lamp_conf,
+                imgsz=lamp_imgsz,
                 verbose=False,
                 max_det=10,
             )
@@ -1703,13 +1995,32 @@ class ObjectDetector:
                 )
                 # Fine-tuned lamp weights already know this globe — don't drop a real hit
                 # because the geometric matcher is picky under classroom lighting.
-                if shown_label == "lamp" and getattr(self, "_custom_lamp", False) and conf >= 0.25:
+                custom_min = float(getattr(self, "custom_min_conf", 0.35))
+                if shown_label == "lamp" and getattr(self, "_custom_lamp", False):
+                    lamp_floor = max(0.18, min(self.conf, 0.24))
+                    if conf < lamp_floor:
+                        continue
                     shape_ok = True
+                if shown_label == "fan" and getattr(self, "fan_model", None) is not None:
+                    continue
+                if shown_label == "fan" and getattr(self, "_custom_fan", False):
+                    if conf < max(self.conf, custom_min):
+                        continue
+                    ok_fan, shown_box = _accept_custom_fan_yolo(
+                        frame_bgr, shown_box, conf, custom_min
+                    )
+                    if not ok_fan:
+                        continue
+                    shape_ok, shown_box = _fan_shape_accepted(
+                        frame_bgr, shown_box, conf, custom_min, crop=False
+                    )
+                    if not shape_ok:
+                        continue
                 if shown_label == "lamp" and not shape_ok:
                     continue
                 if shown_label == "lamp" and conf < max(self.conf, 0.22):
                     continue
-                if shown_label == "lamp":
+                if shown_label == "lamp" and not getattr(self, "_custom_lamp", False):
                     if (
                         not _near_held_lamp(shown_box, fw, fh)
                         or _background_slab(shown_box, fw, fh)
@@ -1733,17 +2044,82 @@ class ObjectDetector:
                     and _fan_on_person(shown_box, people)
                 ):
                     continue
+                if (
+                    shown_label == "fan"
+                    and shape_ok
+                    and _fan_on_person(shown_box, people)
+                    and conf < _custom_fan_trust_conf(custom_min)
+                    and not looks_like_pc_fan(frame_bgr, shown_box)
+                ):
+                    continue
                 raw.append((shown_label, conf, shown_box))
+            if getattr(self, "fan_model", None) is not None:
+                fan_results = self.fan_model.predict(
+                    frame_bgr,
+                    conf=self.conf,
+                    imgsz=self.imgsz,
+                    verbose=False,
+                    max_det=4,
+                )
+                if fan_results and fan_results[0].boxes is not None:
+                    r0 = fan_results[0]
+                    names = r0.names
+                    for box in r0.boxes:
+                        cls_id = int(box.cls.item())
+                        label = canonicalize_label(_name_of(names, cls_id))
+                        if label != "fan":
+                            continue
+                        conf = float(box.conf.item())
+                        xyxy = tuple(int(v) for v in box.xyxy[0].tolist())
+                        custom_min = float(getattr(self, "custom_min_conf", 0.35))
+                        if conf < max(self.conf, custom_min):
+                            continue
+                        ok, xyxy = _accept_custom_fan_yolo(
+                            frame_bgr, xyxy, conf, custom_min
+                        )
+                        if not ok:
+                            continue
+                        shaped, xyxy = _fan_shape_accepted(
+                            frame_bgr, xyxy, conf, custom_min, crop=False
+                        )
+                        if not shaped:
+                            continue
+                        if (
+                            _fan_on_person(xyxy, people)
+                            and conf < _custom_fan_trust_conf(custom_min)
+                            and not looks_like_pc_fan(frame_bgr, xyxy)
+                        ):
+                            continue
+                        if _background_slab(xyxy, fw, fh) or _edge_strip(xyxy, fw, fh):
+                            continue
+                        raw.append(("fan", conf, xyxy))
         elif getattr(self, "last_people", None):
             self._people_misses = getattr(self, "_people_misses", 0) + 1
             if self._people_misses > 8:
                 self.last_people = []
             people = list(getattr(self, "last_people", []))
 
-        raw = self._require_stable_lamp(raw)
-
         h, w = frame_bgr.shape[:2]
-        if getattr(self, "match_fans", True):
+        raw = self._merge_globe_lamps(frame_bgr, raw, people, w, h)
+        raw = self._dedupe_fans(raw)
+        raw = self._require_stable_lamp(raw)
+        raw = self._require_stable_fan(raw)
+        if not any(item[0] == "fan" for item in raw):
+            prev_fans = [p for p in self._last if p.label == "fan"]
+            if prev_fans:
+                self._fan_misses += 1
+                if self._fan_misses <= 3:
+                    pf = max(prev_fans, key=lambda p: p.conf)
+                    raw.append(("fan", float(pf.conf) * 0.97, pf.xyxy))
+            else:
+                self._fan_misses = 0
+        else:
+            self._fan_misses = 0
+
+        if getattr(self, "match_fans", True) and (
+            not getattr(self, "_custom_fan", False)
+            or not any(item[0] == "fan" for item in raw)
+        ):
             for xyxy, conf in find_cooling_fans(frame_bgr, people):
                 if _background_slab(xyxy, w, h):
                     break
@@ -1764,30 +2140,140 @@ class ObjectDetector:
                         raw.append(("fan", conf, xyxy))
                 break
 
-        for xyxy, conf in find_led_bulbs(frame_bgr, people):
-            if _background_slab(xyxy, w, h):
-                continue
-            # Globe wins over a B22 cap; expand the lamp box to cover both.
-            merged: list[tuple[str, float, tuple[int, int, int, int]]] = []
-            have_lamp = False
-            for item in raw:
-                if not _same_held_object(xyxy, item[2]):
-                    merged.append(item)
-                    continue
-                if item[0] == "lamp":
-                    merged.append(("lamp", max(item[1], conf), _union_box(item[2], xyxy)))
-                    have_lamp = True
-            if not have_lamp:
-                merged.append(("lamp", conf, xyxy))
-            raw = merged
-            break
+        if not any(item[0] == "lamp" for item in raw):
+            prev_lamps = [p for p in self._last if p.label == "lamp"]
+            if prev_lamps:
+                pl = max(prev_lamps, key=lambda p: p.conf)
+                if _lit_globe_on(frame_bgr, pl.xyxy):
+                    self._lamp_misses += 1
+                    if self._lamp_misses <= 12:
+                        raw.append(("lamp", float(pl.conf) * 0.96, pl.xyxy))
+                else:
+                    self._lamp_misses = 0
+            else:
+                self._lamp_misses = 0
+        else:
+            self._lamp_misses = 0
 
         raw = _collapse_same_object(frame_bgr, raw)
         raw = _keep_held_appliances(raw, people, w, h)
         raw = self._prune(raw, max(w * h, 1))
         objects = self._match_ids(raw)
+        self._sync_lit_lamp_track(frame_bgr, objects)
         self._last = objects
         return objects
+
+    def _refresh_lamp_between_yolo(self, frame_bgr: np.ndarray) -> list[DetectedObject]:
+        """Globe scan on skipped frames — ON bulbs flicker less between YOLO passes."""
+        if not getattr(self, "_lit_lamp_xyxy", None) and not hasattr(self, "_lit_lamp_miss"):
+            self._lit_lamp_xyxy = None
+            self._lit_lamp_miss = 0
+        if not self._last:
+            return self._last
+        _remember_frame(frame_bgr)
+        h, w = frame_bgr.shape[:2]
+        people = list(getattr(self, "last_people", []) or [])
+        hits = find_led_bulbs(frame_bgr, people)
+        out = list(self._last)
+        lamp_idx = next((i for i, o in enumerate(out) if o.label == "lamp"), None)
+        if hits:
+            xyxy, conf = hits[0]
+            if lamp_idx is not None:
+                prev = out[lamp_idx]
+                xyxy = self._smooth_xyxy(prev.xyxy, xyxy, alpha=0.45)
+                out[lamp_idx] = DetectedObject(
+                    prev.obj_id,
+                    prev.label,
+                    max(float(prev.conf), float(conf)),
+                    xyxy,
+                    prev.appliance or appliance_label("lamp"),
+                )
+            else:
+                oid = f"lamp_{self._next_id}"
+                self._next_id += 1
+                out.append(
+                    DetectedObject(
+                        oid, "lamp", float(conf), xyxy, appliance_label("lamp")
+                    )
+                )
+            self._lit_lamp_xyxy = xyxy
+            self._lit_lamp_miss = 0
+        elif self._lit_lamp_xyxy is not None:
+            self._lit_lamp_miss += 1
+            if self._lit_lamp_miss <= 18 and _lit_globe_on(frame_bgr, self._lit_lamp_xyxy):
+                xyxy = self._lit_lamp_xyxy
+                for box in _globe_lamp_candidates(frame_bgr):
+                    if _iou(box, xyxy) >= 0.10 and _lit_globe_on(frame_bgr, box):
+                        xyxy = box
+                        break
+                self._lit_lamp_xyxy = xyxy
+                if lamp_idx is not None:
+                    prev = out[lamp_idx]
+                    xyxy = self._smooth_xyxy(prev.xyxy, xyxy, alpha=0.38)
+                    out[lamp_idx] = DetectedObject(
+                        prev.obj_id,
+                        prev.label,
+                        prev.conf,
+                        xyxy,
+                        prev.appliance or appliance_label("lamp"),
+                    )
+                else:
+                    oid = f"lamp_{self._next_id}"
+                    self._next_id += 1
+                    out.append(
+                        DetectedObject(
+                            oid, "lamp", 0.88, xyxy, appliance_label("lamp")
+                        )
+                    )
+            else:
+                self._lit_lamp_xyxy = None
+        self._last = out
+        return out
+
+    def _sync_lit_lamp_track(
+        self, frame_bgr: np.ndarray, objects: list[DetectedObject]
+    ) -> None:
+        if not hasattr(self, "_lit_lamp_xyxy"):
+            self._lit_lamp_xyxy = None
+            self._lit_lamp_miss = 0
+        for obj in objects:
+            if obj.label != "lamp":
+                continue
+            if _lit_globe_on(frame_bgr, obj.xyxy):
+                self._lit_lamp_xyxy = obj.xyxy
+                self._lit_lamp_miss = 0
+                return
+        if self._lit_lamp_xyxy is not None:
+            self._lit_lamp_miss += 1
+            if self._lit_lamp_miss > 18:
+                self._lit_lamp_xyxy = None
+
+    def _merge_globe_lamps(
+        self,
+        frame_bgr: np.ndarray,
+        raw: list[tuple[str, float, tuple[int, int, int, int]]],
+        people: list[tuple[int, int, int, int]],
+        frame_w: int,
+        frame_h: int,
+    ) -> list[tuple[str, float, tuple[int, int, int, int]]]:
+        """Vision fallback when YOLO misses an ON bulb (blown-out globe)."""
+        for xyxy, conf in find_led_bulbs(frame_bgr, people):
+            if _background_slab(xyxy, frame_w, frame_h):
+                continue
+            merged: list[tuple[str, float, tuple[int, int, int, int]]] = []
+            have_lamp = False
+            for item in raw:
+                if item[0] != "lamp" or not _same_held_object(xyxy, item[2]):
+                    merged.append(item)
+                    continue
+                merged.append(("lamp", max(item[1], conf), _union_box(item[2], xyxy)))
+                have_lamp = True
+            if not have_lamp:
+                merged = list(raw)
+                merged.append(("lamp", conf, xyxy))
+            raw = merged
+            break
+        return raw
 
     def _require_stable_lamp(
         self, raw: list[tuple[str, float, tuple[int, int, int, int]]]
@@ -1806,6 +2292,45 @@ class ObjectDetector:
             if any(_iou(xyxy, prev[0]) >= 0.40 for prev in pending):
                 out.append((label, conf, xyxy))
         self._pending_lamps = next_pending
+        return out
+
+    def _dedupe_fans(
+        self, raw: list[tuple[str, float, tuple[int, int, int, int]]]
+    ) -> list[tuple[str, float, tuple[int, int, int, int]]]:
+        """One fan box per held object — lamp + fan models must not fight."""
+        fans = [item for item in raw if item[0] == "fan"]
+        if len(fans) <= 1:
+            return raw
+        rest = [item for item in raw if item[0] != "fan"]
+        fans.sort(key=lambda item: item[1], reverse=True)
+        kept: list[tuple[str, float, tuple[int, int, int, int]]] = []
+        for item in fans:
+            if any(_iou(item[2], other[2]) >= 0.22 for other in kept):
+                continue
+            kept.append(item)
+        return rest + kept
+
+    def _require_stable_fan(
+        self, raw: list[tuple[str, float, tuple[int, int, int, int]]]
+    ) -> list[tuple[str, float, tuple[int, int, int, int]]]:
+        """Weak fan YOLO flashes (hair) need two frames; strong hits pass immediately."""
+        pending = getattr(self, "_pending_fans", [])
+        next_pending: list[tuple[tuple[int, int, int, int], float]] = []
+        out: list[tuple[str, float, tuple[int, int, int, int]]] = []
+        trust = _custom_fan_trust_conf(float(getattr(self, "custom_min_conf", 0.35)))
+        instant = max(0.78, trust + 0.12)
+        for label, conf, xyxy in raw:
+            if label != "fan":
+                out.append((label, conf, xyxy))
+                continue
+            if conf >= instant:
+                out.append((label, conf, xyxy))
+                next_pending.append((xyxy, conf))
+                continue
+            next_pending.append((xyxy, conf))
+            if any(_iou(xyxy, prev[0]) >= 0.28 for prev in pending):
+                out.append((label, conf, xyxy))
+        self._pending_fans = next_pending
         return out
 
     def _prune(
@@ -1841,6 +2366,14 @@ class ObjectDetector:
                 break
         return kept
 
+    def _smooth_xyxy(
+        self,
+        prev: tuple[int, int, int, int],
+        new: tuple[int, int, int, int],
+        alpha: float = 0.34,
+    ) -> tuple[int, int, int, int]:
+        return tuple(int(round(alpha * n + (1.0 - alpha) * p)) for p, n in zip(prev, new))
+
     def _match_ids(
         self, raw: list[tuple[str, float, tuple[int, int, int, int]]]
     ) -> list[DetectedObject]:
@@ -1849,6 +2382,8 @@ class ObjectDetector:
         for label, conf, xyxy in raw:
             best_id = None
             best_iou = 0.0
+            best_prev: DetectedObject | None = None
+            match_min = 0.16 if label == "fan" else self.iou_match
             for prev in self._last:
                 if prev.label != label or prev.obj_id in used_prev:
                     continue
@@ -1856,9 +2391,12 @@ class ObjectDetector:
                 if iou > best_iou:
                     best_iou = iou
                     best_id = prev.obj_id
-            if best_id is not None and best_iou >= self.iou_match:
+                    best_prev = prev
+            if best_id is not None and best_iou >= match_min:
                 obj_id = best_id
                 used_prev.add(best_id)
+                if label == "fan" and best_prev is not None:
+                    xyxy = self._smooth_xyxy(best_prev.xyxy, xyxy)
             else:
                 obj_id = f"{label}_{self._next_id}"
                 self._next_id += 1
